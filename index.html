@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#111827" />
+    <meta
+      name="description"
+      content="Bir telefon dükkânını kurup büyüttüğün birinci şahıs işletme simülasyonu."
+    />
+    <title>Telefoncu Simülatörü</title>
+  </head>
+  <body>
+    <main id="app" aria-label="Telefoncu Simülatörü">
+      <div id="game-root" aria-hidden="true"></div>
+      <div id="ui-root"></div>
+
+      <!-- Dikey Ekran Uyarısı (Telefonu Yatay Çevir) -->
+      <div id="orientation-warning" class="hidden">
+        <div class="orientation-backdrop-glow"></div>
+
+        <div class="orientation-card">
+          <span class="corner corner-tl"></span>
+          <span class="corner corner-tr"></span>
+          <span class="corner corner-bl"></span>
+          <span class="corner corner-br"></span>
+
+          <div class="status-pill">
+            <span class="pulse-dot"></span>
+            <span>DÜKKÂN BEKLEMEDE</span>
+          </div>
+
+          <!-- 3D Yataya Döndürme İllüstrasyonu -->
+          <div class="device-rotate-stage">
+            <svg class="rotation-arc" viewBox="0 0 160 160">
+              <circle cx="80" cy="80" r="68" class="arc-track" />
+              <path d="M 80 148 A 68 68 0 0 1 12 80" class="arc-highlight" />
+              <polygon points="12,80 20,90 22,74" class="arc-arrow" />
+            </svg>
+
+            <!-- Telefon Modeli: Dikeyden Yataya Dönüş -->
+            <div class="phone-model landscape-turn">
+              <div class="phone-screen">
+                <div class="notch"></div>
+                <div class="screen-cube">
+                  <div class="cube-face"></div>
+                </div>
+                <div class="home-indicator"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="orientation-text-block">
+            <div class="orientation-eyebrow">YATAY EKRAN MODU GEREKLİ</div>
+            <h2 class="orientation-title">TELEFONU YATAY ÇEVİRİN</h2>
+            <p class="orientation-desc">
+              Telefoncu Simülatörü; tezgâh, müşteri etkileşimi ve telefon inceleme için yatay modda oynanır.
+            </p>
+          </div>
+
+          <div class="orientation-footer-badge">
+            <svg width="16" height="12" viewBox="0 0 24 16" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="12" rx="2" ry="2"></rect>
+              <line x1="18" y1="8" x2="18.01" y2="8"></line>
+            </svg>
+            <span>16:9 LANDSCAPE MODE</span>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

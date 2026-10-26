@@ -798,3 +798,19 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
 .orientation-footer-badge svg {
   color: var(--gold);
 }
+
+.orientation-dismiss-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(229, 183, 101, 0.35);
+  color: var(--cream);
+  font: 11px var(--mono);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.orientation-dismiss-btn:hover {
+  background: rgba(229, 183, 101, 0.22);
+  border-color: var(--gold);
+}

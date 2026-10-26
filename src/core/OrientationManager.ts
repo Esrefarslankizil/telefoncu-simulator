@@ -38,6 +38,12 @@ export class OrientationManager {
     window.addEventListener("pointerdown", onFirstGesture, { once: true, passive: true });
     window.addEventListener("touchstart", onFirstGesture, { once: true, passive: true });
     window.addEventListener("click", onFirstGesture, { once: true, passive: true });
+
+    // Dik modda devam etme butonu dinleyicisi
+    this.warningEl?.querySelector(".orientation-dismiss-btn")?.addEventListener("click", () => {
+      this.warningEl?.classList.add("hidden");
+      this.onResume?.();
+    });
   }
 
   public bindFullscreenButton(btn: HTMLButtonElement | null): void {

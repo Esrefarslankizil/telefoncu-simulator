@@ -568,6 +568,12 @@ async function bootstrap(): Promise<void> {
   const scene = new Scene();
   scene.background = new Color("#182322");
 
+  let activeWakeUntil = performance.now() + 2500;
+  const wakeRender = (ms = 1800): void => {
+    const until = performance.now() + ms;
+    if (until > activeWakeUntil) activeWakeUntil = until;
+  };
+
   // Birinci şahıs kamera: Oyuncu tezgâhın arkasında göz hizasında (y = 1.68) durur
   const camera = new PerspectiveCamera(52, window.innerWidth / Math.max(window.innerHeight, 1), 0.08, 35);
   camera.position.set(0, 1.68, -0.85);
@@ -1110,12 +1116,6 @@ async function bootstrap(): Promise<void> {
   const camCurrentLook = new Vector3(0, 1.40, 1.45);
   let lookYawOffset = 0;
   let lookPitchOffset = 0;
-  let activeWakeUntil = performance.now() + 2500;
-
-  const wakeRender = (ms = 1800): void => {
-    const until = performance.now() + ms;
-    if (until > activeWakeUntil) activeWakeUntil = until;
-  };
 
   events.on("game:paused", () => {
     audio.suspend();

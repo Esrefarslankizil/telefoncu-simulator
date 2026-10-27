@@ -48,6 +48,16 @@ export interface CustomerPersonality {
   readonly apronColor: string;
 }
 
+export type BatteryRating = "ÇOK KÖTÜ" | "KÖTÜ" | "ORTA" | "İYİ" | "ÇOK İYİ";
+
+export function getBatteryRating(healthPct: number, hasDefect = false): BatteryRating {
+  if (hasDefect || healthPct < 60) return "ÇOK KÖTÜ";
+  if (healthPct < 75) return "KÖTÜ";
+  if (healthPct < 85) return "ORTA";
+  if (healthPct < 95) return "İYİ";
+  return "ÇOK İYİ";
+}
+
 export interface GeneratedPhone {
   readonly uid: string;
   readonly brand: string;
@@ -481,7 +491,20 @@ export function generateCustomerEncounter(
   const actualValue = Math.max(500, baseValue - totalLoss);
 
   const hasBatteryDefect = defects.some((d) => d.category === "battery");
-  const batteryHealth = hasBatteryDefect ? rng.nextInt(58, 72) : rng.nextInt(92, 99);
+  let batteryHealth: number;
+  if (hasBatteryDefect) {
+    batteryHealth = rng.nextInt(45, 59);
+  } else if (ageYears >= 4) {
+    batteryHealth = rng.nextInt(60, 74);
+  } else if (ageYears === 3) {
+    batteryHealth = rng.nextInt(75, 84);
+  } else if (ageYears === 2) {
+    batteryHealth = rng.nextInt(82, 92);
+  } else if (ageYears === 1) {
+    batteryHealth = rng.nextInt(88, 96);
+  } else {
+    batteryHealth = rng.nextInt(95, 100);
+  }
 
   const phone: GeneratedPhone = {
     uid: `ph_${Date.now()}_${rng.nextInt(100, 999)}`,

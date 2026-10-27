@@ -3,6 +3,7 @@ import {
   BufferGeometry,
   BoxGeometry,
   CanvasTexture,
+  CatmullRomCurve3,
   Color,
   CylinderGeometry,
   DirectionalLight,
@@ -17,6 +18,7 @@ import {
   Scene,
   SphereGeometry,
   Raycaster,
+  TubeGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
@@ -34,11 +36,13 @@ import { SeededRNG } from "./core/SeededRNG";
 import {
   INSPECTION_CATEGORIES,
   generateCustomerEncounter,
+  getBatteryRating,
   getDailyCustomerQuota,
   getKnownPhoneValue,
   roundTo50,
 } from "./data/PhoneCatalog";
 import type {
+  BatteryRating,
   CustomerIntent,
   GeneratedPhone,
   InspectionCategoryId,
@@ -706,36 +710,181 @@ async function bootstrap(): Promise<void> {
 
   // =========================================================================
   // TEZGÂHTAKİ FİZİKSEL TEST ALETLERİ (3D)
-  // 1. Şarj Cihazı & Dijital Ampermetre Ünitesi (Matın sağında)
+  // Sadece Batarya Test Cihazı ve Büyüteç (Gereksiz kalabalık kutular kaldırıldı)
   // =========================================================================
   const ammeterUnit = new Group();
-  ammeterUnit.position.set(0.30, 1.272, 0.20);
+  ammeterUnit.visible = false;
   scene.add(ammeterUnit);
-  const ammeterBody = addBox(ammeterUnit, [0.15, 0.042, 0.14], [0, 0.021, 0], material("#1e293b", 0.35, 0.6));
-  ammeterBody.userData["stationTarget"] = "repair";
-  ammeterBody.userData["benchTool"] = "charger";
+  const ammeterDisplayMat = material("#0d9488", 0.2, 0.1);
 
-  const ammeterDisplayMat = material("#0d9488", 0.2, 0.1); // Dijital ekran parlama rengi
-  const ammeterDisplay = addBox(ammeterUnit, [0.10, 0.003, 0.07], [0, 0.043, 0], ammeterDisplayMat);
-  ammeterDisplay.userData["stationTarget"] = "repair";
-  ammeterDisplay.userData["benchTool"] = "charger";
+  // 1. Batarya Test Cihazı & Canlı LCD Ekranı (Telefonun sağında z=0.22 ekseninde 180° tam yatay hat)
+  const batteryTesterGroup = new Group();
+  batteryTesterGroup.position.set(0.32, 1.272, 0.22);
+  scene.add(batteryTesterGroup);
 
-  addCylinder(ammeterUnit, 0.012, 0.008, [0.045, 0.044, -0.045], gold);
-  addCylinder(ammeterUnit, 0.012, 0.008, [-0.045, 0.044, -0.045], badMat);
+  const battBody = addBox(batteryTesterGroup, [0.12, 0.038, 0.10], [0, 0.019, 0], material("#1e293b", 0.35, 0.5));
+  battBody.userData["stationTarget"] = "repair";
+  battBody.userData["benchTool"] = "battery";
+
+  const bumperL = addBox(batteryTesterGroup, [0.01, 0.040, 0.102], [-0.06, 0.019, 0], teal);
+  bumperL.userData["stationTarget"] = "repair";
+  bumperL.userData["benchTool"] = "battery";
+  const bumperR = addBox(batteryTesterGroup, [0.01, 0.040, 0.102], [0.06, 0.019, 0], teal);
+  bumperR.userData["stationTarget"] = "repair";
+  bumperR.userData["benchTool"] = "battery";
+
+  // Kablo çıkış soketi / burcu (telefona bakan sol yüzde, x=-0.064, y=0.019, z=0)
+  const socketCollar = addCylinder(batteryTesterGroup, 0.007, 0.012, [-0.064, 0.019, 0], material("#0f172a", 0.3, 0.2));
+  socketCollar.rotation.z = Math.PI / 2;
+  socketCollar.userData["stationTarget"] = "repair";
+  socketCollar.userData["benchTool"] = "battery";
+
+  // 3B Cihaz üzerindeki dinamik dijital LCD gösterge
+  const battLcdCanvas = document.createElement("canvas");
+  battLcdCanvas.width = 256;
+  battLcdCanvas.height = 128;
+  const battLcdCtx = battLcdCanvas.getContext("2d")!;
+  const battLcdTexture = new CanvasTexture(battLcdCanvas);
+  const battLcdMat = new MeshBasicMaterial({ map: battLcdTexture });
+  mats.push(battLcdMat);
+
+  const updateBatteryLcd = (
+    state: "idle" | "testing" | "done",
+    progress = 0,
+    isHealthy = true,
+    healthPct = 98,
+  ): void => {
+    battLcdCtx.clearRect(0, 0, 256, 128);
+
+    if (state === "idle") {
+      battLcdCtx.fillStyle = "#081c17";
+      battLcdCtx.fillRect(0, 0, 256, 128);
+      battLcdCtx.fillStyle = "#10b981";
+      battLcdCtx.font = "bold 19px monospace";
+      battLcdCtx.textAlign = "center";
+      battLcdCtx.fillText("BATARYA TEST CİHAZI", 128, 42);
+      battLcdCtx.fillStyle = "#facc15";
+      battLcdCtx.font = "bold 15px monospace";
+      battLcdCtx.fillText("Kabloyu Telefona Tak", 128, 76);
+      battLcdCtx.fillStyle = "#94a3b8";
+      battLcdCtx.font = "12px monospace";
+      battLcdCtx.fillText("5.1V / 0.0A HAZIR", 128, 106);
+    } else if (state === "testing") {
+      battLcdCtx.fillStyle = "#08202d";
+      battLcdCtx.fillRect(0, 0, 256, 128);
+      battLcdCtx.fillStyle = "#38bdf8";
+      battLcdCtx.font = "bold 19px monospace";
+      battLcdCtx.textAlign = "center";
+      battLcdCtx.fillText(`ÖLÇÜM: %${progress}`, 128, 38);
+
+      battLcdCtx.fillStyle = "#03151b";
+      battLcdCtx.fillRect(28, 56, 200, 20);
+      battLcdCtx.fillStyle = "#38bdf8";
+      battLcdCtx.fillRect(28, 56, Math.round(200 * (progress / 100)), 20);
+
+      battLcdCtx.fillStyle = "#cbd5e1";
+      battLcdCtx.font = "13px monospace";
+      battLcdCtx.fillText("Hücre & Akım Analizi...", 128, 104);
+    } else {
+      const rating: BatteryRating = getBatteryRating(healthPct, !isHealthy);
+      let bg = "#07301c";
+      let headerColor = "#4ade80";
+      let ratingColor = "#86efac";
+
+      if (rating === "ÇOK KÖTÜ") {
+        bg = "#3b0c0c";
+        headerColor = "#f87171";
+        ratingColor = "#fca5a5";
+      } else if (rating === "KÖTÜ") {
+        bg = "#3a1908";
+        headerColor = "#fb923c";
+        ratingColor = "#fed7aa";
+      } else if (rating === "ORTA") {
+        bg = "#332a08";
+        headerColor = "#facc15";
+        ratingColor = "#fef08a";
+      } else if (rating === "İYİ") {
+        bg = "#07301c";
+        headerColor = "#4ade80";
+        ratingColor = "#86efac";
+      } else if (rating === "ÇOK İYİ") {
+        bg = "#08332a";
+        headerColor = "#22d3ee";
+        ratingColor = "#67e8f9";
+      }
+
+      battLcdCtx.fillStyle = bg;
+      battLcdCtx.fillRect(0, 0, 256, 128);
+      battLcdCtx.fillStyle = headerColor;
+      battLcdCtx.font = "bold 17px monospace";
+      battLcdCtx.textAlign = "center";
+      const icon = rating === "ÇOK KÖTÜ" || rating === "KÖTÜ" ? "⚠" : "✓";
+      battLcdCtx.fillText(`${icon} ANALİZ TAMAMLANDI`, 128, 36);
+      battLcdCtx.fillStyle = "#ffffff";
+      battLcdCtx.font = "900 24px monospace";
+      battLcdCtx.fillText(`PİL: %${healthPct}`, 128, 72);
+      battLcdCtx.fillStyle = ratingColor;
+      battLcdCtx.font = "bold 15px monospace";
+      battLcdCtx.fillText(`DURUM: ${rating}`, 128, 106);
+    }
+    battLcdTexture.needsUpdate = true;
+    wakeRender(120);
+  };
+  updateBatteryLcd("idle");
+
+  const battLcd = addBox(batteryTesterGroup, [0.095, 0.003, 0.060], [0, 0.039, 0], battLcdMat);
+  battLcd.userData["stationTarget"] = "repair";
+  battLcd.userData["benchTool"] = "battery";
 
   // Şarj Kablosu ve Type-C Fiş Grubu (Batarya test probu)
   const cablePlugGroup = new Group();
-  cablePlugGroup.position.set(0.22, 1.274, 0.36);
-  cablePlugGroup.rotation.y = 0.4;
+  cablePlugGroup.position.set(0.23, 1.274, 0.22);
+  cablePlugGroup.rotation.set(0, 0, 0);
   scene.add(cablePlugGroup);
-  const plugHandle = addBox(cablePlugGroup, [0.024, 0.014, 0.045], [0, 0.007, 0], material("#334155", 0.4, 0.3));
+
+  const plugHandle = addBox(cablePlugGroup, [0.032, 0.012, 0.022], [0, 0.006, 0], material("#334155", 0.4, 0.3));
   plugHandle.userData["stationTarget"] = "repair";
   plugHandle.userData["benchTool"] = "charger";
-  const plugPin = addBox(cablePlugGroup, [0.014, 0.005, 0.016], [0, 0.007, 0.028], metalColor);
+
+  const plugPin = addBox(cablePlugGroup, [0.015, 0.005, 0.014], [-0.023, 0.006, 0], metalColor);
   plugPin.userData["stationTarget"] = "repair";
   plugPin.userData["benchTool"] = "charger";
-  const cableWire = addCylinder(cablePlugGroup, 0.004, 0.14, [0, 0.007, -0.08], black);
-  cableWire.rotation.x = Math.PI / 2;
+
+  const plugBoot = addCylinder(cablePlugGroup, 0.005, 0.010, [0.021, 0.006, 0], material("#0f172a", 0.3, 0.2));
+  plugBoot.rotation.z = Math.PI / 2;
+  plugBoot.userData["stationTarget"] = "repair";
+  plugBoot.userData["benchTool"] = "charger";
+
+  // Batarya test cihazından fişe uzanan 3B Dinamik Kablo
+  const cableMat = material("#0f172a", 0.45, 0.15);
+  mats.push(cableMat);
+
+  const buildCableCurve = (pStart: Vector3, pEnd: Vector3, isPlugged: boolean): CatmullRomCurve3 => {
+    if (isPlugged) {
+      const pMid = new Vector3((pStart.x + pEnd.x) * 0.5, 1.280, pStart.z);
+      return new CatmullRomCurve3([pStart, pMid, pEnd]);
+    }
+    const midX = (pStart.x + pEnd.x) * 0.5;
+    const dist = Math.hypot(pStart.x - pEnd.x, pStart.z - pEnd.z);
+    const midZ = (pStart.z + pEnd.z) * 0.5 + Math.min(0.045, Math.max(0.01, dist * 0.28));
+    const midY = 1.276;
+    return new CatmullRomCurve3([pStart, new Vector3(midX, midY, midZ), pEnd]);
+  };
+
+  const initialPStart = new Vector3(0.32 - 0.064, 1.280, 0.22);
+  const initialPEnd = new Vector3(0.23 + 0.021, 1.280, 0.22);
+  let cableGeo = new TubeGeometry(buildCableCurve(initialPStart, initialPEnd, false), 16, 0.0035, 6, false);
+  geometries.push(cableGeo);
+  const cableMesh = new Mesh(cableGeo, cableMat);
+  scene.add(cableMesh);
+
+  const updateCableMesh = (isPlugged: boolean): void => {
+    const pStart = new Vector3(batteryTesterGroup.position.x - 0.064, 1.280, batteryTesterGroup.position.z);
+    const pEnd = new Vector3(cablePlugGroup.position.x + 0.021, 1.280, cablePlugGroup.position.z);
+    cableGeo.dispose();
+    cableGeo = new TubeGeometry(buildCableCurve(pStart, pEnd, isPlugged), 16, 0.0035, 6, false);
+    cableMesh.geometry = cableGeo;
+  };
 
   // 2. Büyüteç (Şeffaf camlı ve altın çerçeveli - Ekranda kılcal çatlak ve kırıkları aramak için)
   const magnifierGroup = new Group();
@@ -772,103 +921,7 @@ async function bootstrap(): Promise<void> {
   magHandle.userData["stationTarget"] = "repair";
   magHandle.userData["benchTool"] = "magnifier";
 
-  // 3. Batarya Test Analizörü & Canlı LCD Ekranı (Matın sağ üst köşesinde)
-  const batteryTesterGroup = new Group();
-  batteryTesterGroup.position.set(0.30, 1.272, 0.06);
-  scene.add(batteryTesterGroup);
 
-  const battBody = addBox(batteryTesterGroup, [0.12, 0.035, 0.09], [0, 0.018, 0], warnMat);
-  battBody.userData["stationTarget"] = "repair";
-  battBody.userData["benchTool"] = "battery";
-
-  // 3B Cihaz üzerindeki dinamik dijital LCD gösterge
-  const battLcdCanvas = document.createElement("canvas");
-  battLcdCanvas.width = 256;
-  battLcdCanvas.height = 128;
-  const battLcdCtx = battLcdCanvas.getContext("2d")!;
-  const battLcdTexture = new CanvasTexture(battLcdCanvas);
-  const battLcdMat = new MeshBasicMaterial({ map: battLcdTexture });
-  mats.push(battLcdMat);
-
-  const updateBatteryLcd = (
-    state: "idle" | "testing" | "done",
-    progress = 0,
-    isHealthy = true,
-    healthPct = 98,
-  ): void => {
-    battLcdCtx.clearRect(0, 0, 256, 128);
-
-    if (state === "idle") {
-      battLcdCtx.fillStyle = "#0c2820";
-      battLcdCtx.fillRect(0, 0, 256, 128);
-      battLcdCtx.fillStyle = "#10b981";
-      battLcdCtx.font = "bold 19px monospace";
-      battLcdCtx.textAlign = "center";
-      battLcdCtx.fillText("PIL TEST CIHAZI", 128, 44);
-      battLcdCtx.fillStyle = "#d7a958";
-      battLcdCtx.font = "bold 15px monospace";
-      battLcdCtx.fillText("Prob'u Şarja Tak", 128, 78);
-      battLcdCtx.fillStyle = "#94a3b8";
-      battLcdCtx.font = "12px monospace";
-      battLcdCtx.fillText("5.1V / 0.0A HAZIR", 128, 106);
-    } else if (state === "testing") {
-      battLcdCtx.fillStyle = "#09252c";
-      battLcdCtx.fillRect(0, 0, 256, 128);
-      battLcdCtx.fillStyle = "#38bdf8";
-      battLcdCtx.font = "bold 20px monospace";
-      battLcdCtx.textAlign = "center";
-      battLcdCtx.fillText(`ÖLÇÜM: %${progress}`, 128, 42);
-
-      battLcdCtx.fillStyle = "#03151b";
-      battLcdCtx.fillRect(28, 62, 200, 20);
-      battLcdCtx.fillStyle = "#38bdf8";
-      battLcdCtx.fillRect(28, 62, Math.round(200 * (progress / 100)), 20);
-
-      battLcdCtx.fillStyle = "#94a3b8";
-      battLcdCtx.font = "13px monospace";
-      battLcdCtx.fillText("Hücre & Akım Ölçülüyor", 128, 110);
-    } else {
-      if (isHealthy) {
-        battLcdCtx.fillStyle = "#07301c";
-        battLcdCtx.fillRect(0, 0, 256, 128);
-        battLcdCtx.fillStyle = "#4ade80";
-        battLcdCtx.font = "bold 18px monospace";
-        battLcdCtx.textAlign = "center";
-        battLcdCtx.fillText("✓ ÖLÇÜM %100 TAMAM", 128, 38);
-        battLcdCtx.fillStyle = "#ffffff";
-        battLcdCtx.font = "900 24px monospace";
-        battLcdCtx.fillText(`PİL SAĞLIĞI: %${healthPct}`, 128, 74);
-        battLcdCtx.fillStyle = "#86efac";
-        battLcdCtx.font = "bold 15px monospace";
-        battLcdCtx.fillText("DURUM: İYİ / SAĞLAM", 128, 106);
-      } else {
-        battLcdCtx.fillStyle = "#3b0c0c";
-        battLcdCtx.fillRect(0, 0, 256, 128);
-        battLcdCtx.fillStyle = "#f87171";
-        battLcdCtx.font = "bold 18px monospace";
-        battLcdCtx.textAlign = "center";
-        battLcdCtx.fillText("⚠ ÖLÇÜM %100 TAMAM", 128, 38);
-        battLcdCtx.fillStyle = "#ffffff";
-        battLcdCtx.font = "900 24px monospace";
-        battLcdCtx.fillText(`PİL SAĞLIĞI: %${healthPct}`, 128, 74);
-        battLcdCtx.fillStyle = "#fca5a5";
-        battLcdCtx.font = "bold 15px monospace";
-        battLcdCtx.fillText("DURUM: ARIZALI / ŞİŞMİŞ", 128, 106);
-      }
-    }
-    battLcdTexture.needsUpdate = true;
-    wakeRender(120);
-  };
-  updateBatteryLcd("idle");
-
-  const battLcd = addBox(batteryTesterGroup, [0.09, 0.002, 0.05], [0, 0.036, 0], battLcdMat);
-  battLcd.userData["stationTarget"] = "repair";
-  battLcd.userData["benchTool"] = "battery";
-
-  const probeRed = addCylinder(batteryTesterGroup, 0.005, 0.06, [0.035, 0.006, 0.065], badMat);
-  probeRed.rotation.x = Math.PI / 2;
-  const probeBlack = addCylinder(batteryTesterGroup, 0.005, 0.06, [-0.035, 0.006, 0.065], black);
-  probeBlack.rotation.x = Math.PI / 2;
 
   // Masa üstü aksesuarları (Kasa POS cihazı, çalışma lambası)
   const posBase = addBox(scene, [0.38, 0.16, 0.28], [2.2, 1.34, 0.2], metalColor);
@@ -1002,12 +1055,15 @@ async function bootstrap(): Promise<void> {
   addBox(phone, [0.038, 0.002, 0.011], [0, 0.011, -0.165], black);
   addBox(phone, [0.035, 0.002, 0.003], [0, 0.011, -0.182], darkWood);
 
-  // 5. Yan Tuşlar (Güç tuşu ve Ses aç/kapa)
-  addBox(phone, [0.003, 0.005, 0.045], [0.096, 0, -0.04], phoneFrameMat);
+  // 5. Yan Tuşlar (Ses tuşları sol yanda, Güç tuşu sağ yanda üst kısımda)
+  addBox(phone, [0.003, 0.005, 0.035], [0.096, 0, -0.08], phoneFrameMat);
   addBox(phone, [0.003, 0.005, 0.07], [-0.096, 0, -0.04], phoneFrameMat);
 
-  // 6. Alt Type-C Şarj Girişi ve Hoparlör Delikleri
-  addBox(phone, [0.024, 0.005, 0.003], [0, 0, 0.191], black);
+  // 6. Sağ Yan Type-C Şarj Girişi (Batarya test cihazıyla 180° tam hizalı hat)
+  addBox(phone, [0.004, 0.007, 0.026], [0.096, 0, 0], black);
+  addBox(phone, [0.002, 0.009, 0.030], [0.0955, 0, 0], metalColor);
+
+  // Alt Hoparlör & Mikrofon Izgaraları
   addBox(phone, [0.028, 0.003, 0.003], [-0.05, 0, 0.191], black);
   addBox(phone, [0.028, 0.003, 0.003], [0.05, 0, 0.191], black);
 
@@ -1166,6 +1222,7 @@ async function bootstrap(): Promise<void> {
     phoneScreenCanvas,
     phoneScreenTexture,
     updateBatteryLcd,
+    updateCableMesh,
     camTargetPos,
     camTargetLook,
     () => {
@@ -1315,6 +1372,7 @@ function buildInterface(
     isHealthy?: boolean,
     healthPct?: number,
   ) => void,
+  updateCableMesh: (isPlugged: boolean) => void,
   camTargetPos: Vector3,
   camTargetLook: Vector3,
   resetLookOffset: () => void,
@@ -1345,9 +1403,9 @@ function buildInterface(
   let typewriterTimer: number | null = null;
   let selectedStockIdx = 0;
 
-  const chargerDockPos = new Vector3(0.22, 1.274, 0.36);
+  const chargerDockPos = new Vector3(0.23, 1.274, 0.22);
   const magnifierDockPos = new Vector3(-0.28, 1.274, 0.22);
-  const chargePortPos = new Vector3(0, 1.278, 0.40);
+  const chargePortPos = new Vector3(0.096, 1.278, 0.22);
   const benchPlane = new Plane(new Vector3(0, 1, 0), -1.274);
 
   let encounter = generateCustomerEncounter(rng, store.getState().reputation, stockItems.length);
@@ -1472,7 +1530,7 @@ function buildInterface(
       </div>
 
       <div class="inspect-hints-bar">
-        <span class="hint-pill" data-hint="battery"><b>⚡ Test Probunu Sürükle:</b> Bataryayı Ölç</span>
+        <span class="hint-pill" data-hint="battery"><b>⚡ Test Kablosunu Bağla:</b> Batarya Test Cihazı</span>
         <span class="hint-pill" data-hint="magnifier"><b>🔍 Büyüteci Gezdir:</b> Çatlak & Kırık Ara</span>
         <span class="hint-pill" data-hint="screen"><b>👆👆 Çift Dokun:</b> Ekranı Aç/Kapat</span>
         <span class="hint-pill" data-hint="camera"><b>📸 Kamera:</b> Uygulamayı Aç</span>
@@ -1831,18 +1889,19 @@ function buildInterface(
     // 1. Batarya test durumu
     if (ph.inspected["battery"]) {
       const battDefect = ph.defects.find((d) => d.category === "battery");
+      const battRating = getBatteryRating(ph.batteryHealth, !!battDefect);
       if (batteryHint) {
-        if (battDefect) {
+        if (battRating === "ÇOK KÖTÜ" || battRating === "KÖTÜ") {
           batteryHint.className = "hint-pill warn";
-          batteryHint.innerHTML = `<b>⚠ Batarya:</b> %${ph.batteryHealth} (Arızalı/Şişmiş)`;
+          batteryHint.innerHTML = `<b>⚠ Batarya:</b> %${ph.batteryHealth} (${battRating})`;
         } else {
           batteryHint.className = "hint-pill good";
-          batteryHint.innerHTML = `<b>✓ Batarya:</b> %${ph.batteryHealth} (Sağlıklı / Orijinal)`;
+          batteryHint.innerHTML = `<b>✓ Batarya:</b> %${ph.batteryHealth} (${battRating})`;
         }
       }
     } else if (batteryHint) {
       batteryHint.className = "hint-pill";
-      batteryHint.innerHTML = "<b>⚡ Test Probunu Sürükle:</b> Bataryayı Ölç (3 sn)";
+      batteryHint.innerHTML = "<b>⚡ Test Kablosunu Bağla:</b> Batarya Test Cihazı";
     }
 
     // 2. Ekran durumu (Büyüteç ile inceleme)
@@ -1892,16 +1951,19 @@ function buildInterface(
     }
     audio.unlock();
     isChargerPlugged = true;
-    cablePlugGroup.position.copy(chargePortPos);
+    cablePlugGroup.position.set(0.119, 1.278, 0.22);
     cablePlugGroup.rotation.set(0, 0, 0);
+    updateCableMesh(true);
     audio.playCablePlug();
     ammeterDisplayMat.color.set("#38bdf8"); // Canlı camgöbeği elektrik akımı
 
     batteryLiveOverlay.hidden = false;
+    const overlayHeading = batteryLiveOverlay.querySelector("strong");
+    if (overlayHeading) overlayHeading.textContent = "⚡ BATARYA ANALİZİ YAPILIYOR...";
     batteryLiveVal.style.color = "var(--gold)";
-    batteryLiveVal.textContent = "Ölçüm: %0";
+    batteryLiveVal.textContent = "%0";
     batteryLiveFill.style.width = "0%";
-    notify("⚡ Batarya test probu takıldı. Ölçüm %0'dan %100'e yapılıyor (3 sn)...");
+    notify("⚡ Batarya test kablosu bağlandı. Analiz yapılıyor (3 sn)...");
     updateBatteryLcd("testing", 0);
 
     const startTime = performance.now();
@@ -1910,7 +1972,7 @@ function buildInterface(
     batteryTestInterval = window.setInterval(() => {
       const elapsed = performance.now() - startTime;
       const progress = Math.min(100, Math.floor((elapsed / durationMs) * 100));
-      batteryLiveVal.textContent = `Ölçüm: %${progress}`;
+      batteryLiveVal.textContent = `%${progress}`;
       batteryLiveFill.style.width = `${progress}%`;
       audio.playProgressTick(480 + progress * 7);
       updateBatteryLcd("testing", progress);
@@ -1924,30 +1986,33 @@ function buildInterface(
         const ph = encounter.phone;
         const defect = ph.defects.find((d) => d.category === "battery");
         const isHealthy = !defect;
-        const healthPct = ph.batteryHealth ?? (isHealthy ? 96 : 64);
+        const healthPct = ph.batteryHealth ?? (isHealthy ? 96 : 54);
+        const rating: BatteryRating = getBatteryRating(healthPct, !isHealthy);
 
         updateBatteryLcd("done", 100, isHealthy, healthPct);
 
-        if (!isHealthy) {
+        if (rating === "ÇOK KÖTÜ" || rating === "KÖTÜ") {
           audio.playDefect();
-          batteryMarker.visible = true; // 3B Şişmiş batarya göstergesi
-          batteryLiveVal.textContent = `⚠ ÖLÇÜM %100 TAMAMLANDI · PİL: %${healthPct} (ARIZALI / ŞİŞMİŞ)`;
-          batteryLiveVal.style.color = "#f87171";
+          if (defect) batteryMarker.visible = true; // 3B Şişmiş batarya göstergesi
+          if (overlayHeading) overlayHeading.textContent = "⚠ BATARYA ANALİZİ TAMAMLANDI";
+          batteryLiveVal.textContent = `%${healthPct} · ${rating}`;
+          batteryLiveVal.style.color = rating === "ÇOK KÖTÜ" ? "#f87171" : "#fb923c";
           ammeterDisplayMat.color.set("#ef4444"); // Kırmızı uyarı
           runCategoryInspection("battery");
-          notify(`⚠ Batarya Testi: Pil Sağlığı %${healthPct} (${defect?.title || "Arızalı Batarya"})`);
+          notify(`⚠ Batarya Test Cihazı: Pil Sağlığı %${healthPct} · Durum: ${rating} (${defect?.title || "Aşınmış Batarya"})`);
         } else {
           audio.playClean();
-          batteryLiveVal.textContent = `✓ ÖLÇÜM %100 TAMAMLANDI · PİL: %${healthPct} (İYİ / SAĞLAM)`;
-          batteryLiveVal.style.color = "#4ade80";
+          if (overlayHeading) overlayHeading.textContent = "✓ BATARYA ANALİZİ TAMAMLANDI";
+          batteryLiveVal.textContent = `%${healthPct} · ${rating}`;
+          batteryLiveVal.style.color = rating === "ÇOK İYİ" ? "#22d3ee" : rating === "İYİ" ? "#4ade80" : "#facc15";
           ammeterDisplayMat.color.set("#10b981"); // Yeşil temiz akım
           runCategoryInspection("battery");
-          notify(`✓ Batarya Testi: Ölçüm %100 Tamamlandı. Pil Sağlığı %${healthPct} (İyi / Orijinal).`);
+          notify(`✓ Batarya Test Cihazı: Pil Sağlığı %${healthPct} · Durum: ${rating}`);
         }
         updateInspectionHud();
         window.setTimeout(() => {
           batteryLiveOverlay.hidden = true;
-        }, 4500);
+        }, 4000);
       }
     }, 60);
   };
@@ -2396,10 +2461,11 @@ function buildInterface(
       const scrDef = ph.defects.find((d) => d.category === "screen");
       const camDef = ph.defects.find((d) => d.category === "camera");
 
+      const battRating: BatteryRating = getBatteryRating(ph.batteryHealth, !!battDef);
       const battBadge = ph.inspected["battery"]
         ? battDef
-          ? `<b class="bad">⚠ Pil: %${ph.batteryHealth} (−₺${battDef.valueLoss.toLocaleString("tr-TR")})</b>`
-          : `<b class="good">✓ Pil: %${ph.batteryHealth} (İyi)</b>`
+          ? `<b class="bad">⚠ Pil: %${ph.batteryHealth} (${battRating}) (−₺${battDef.valueLoss.toLocaleString("tr-TR")})</b>`
+          : `<b class="good">✓ Pil: %${ph.batteryHealth} (${battRating})</b>`
         : `<span style="opacity:0.55;">? Pil Ölçülmedi</span>`;
 
       const scrBadge = ph.inspected["screen"]
@@ -2788,7 +2854,7 @@ function buildInterface(
       repair: {
         eye: "CİHAZI İNCELE · 90° KUŞBAKIŞI TEZGÂH",
         heading: `${encounter.phone.brand} ${encounter.phone.model} (${encounter.phone.storage})`,
-        body: "Tezgâhtaki aletleri kullan: Çift dokunarak aç, batarya probunu şarj girişine sürükle (3sn sayaç), büyüteçle çizik ara, kamera uygulamasından zemini test et.",
+        body: "Tezgâhtaki aletleri kullan: Çift dokunarak aç, batarya test kablosunu telefonun yan şarj girişine bağla (3 sn analiz), büyüteçle çizik ara, kamera uygulamasından zemini test et.",
         position: [0, 1.95, 0.2201],
         look: [0, 1.266, 0.22],
       },
@@ -2822,6 +2888,9 @@ function buildInterface(
       stationNav.classList.add("hidden-in-inspect");
       inspectionHud.hidden = false;
       inspectionHud.classList.add("active");
+      if (!isChargerPlugged) {
+        batteryLiveOverlay.hidden = true;
+      }
       updateScreenDisplay();
       updateInspectionHud();
     } else {
@@ -2838,10 +2907,17 @@ function buildInterface(
       customerCardEl.classList.remove("hidden-in-inspect");
       workPanelEl.classList.remove("hidden-in-inspect");
       stationNav.classList.remove("hidden-in-inspect");
+      if (batteryTestInterval !== null) {
+        clearInterval(batteryTestInterval);
+        batteryTestInterval = null;
+      }
+      batteryLiveOverlay.hidden = true;
       if (isChargerPlugged) {
         isChargerPlugged = false;
         cablePlugGroup.position.copy(chargerDockPos);
-        cablePlugGroup.rotation.set(0, 0.4, 0);
+        cablePlugGroup.rotation.set(0, 0, 0);
+        updateCableMesh(false);
+        updateBatteryLcd("idle");
         ammeterDisplayMat.color.set("#0d9488");
       }
     }
@@ -2881,8 +2957,14 @@ function buildInterface(
     isScreenPoweredOn = false;
     isChargerPlugged = false;
     inCameraApp = false;
+    if (batteryTestInterval !== null) {
+      clearInterval(batteryTestInterval);
+      batteryTestInterval = null;
+    }
+    batteryLiveOverlay.hidden = true;
     cablePlugGroup.position.copy(chargerDockPos);
-    cablePlugGroup.rotation.set(0, 0.4, 0);
+    cablePlugGroup.rotation.set(0, 0, 0);
+    updateCableMesh(false);
     magnifierGroup.position.copy(magnifierDockPos);
     magnifierGroup.rotation.set(0, 0.1, 0);
     updateBatteryLcd("idle");
@@ -2913,8 +2995,14 @@ function buildInterface(
     customerWaitTimer = rng.nextInt(30, 40);
     dealFinished = false;
     lastTransactionSummary = null;
+    if (batteryTestInterval !== null) {
+      clearInterval(batteryTestInterval);
+      batteryTestInterval = null;
+    }
+    batteryLiveOverlay.hidden = true;
     cablePlugGroup.position.copy(chargerDockPos);
-    cablePlugGroup.rotation.set(0, 0.4, 0);
+    cablePlugGroup.rotation.set(0, 0, 0);
+    updateCableMesh(false);
     magnifierGroup.position.copy(magnifierDockPos);
     magnifierGroup.rotation.set(0, 0.1, 0);
     isChargerPlugged = false;
@@ -3117,6 +3205,7 @@ function buildInterface(
           if (activeToolDragging === "charger") {
             cablePlugGroup.position.x = Math.max(-0.35, Math.min(0.35, intersect.x));
             cablePlugGroup.position.z = Math.max(-0.05, Math.min(0.50, intersect.z));
+            updateCableMesh(false);
             wakeRender(400);
           } else if (activeToolDragging === "magnifier") {
             magnifierGroup.position.x = Math.max(-0.35, Math.min(0.35, intersect.x));
@@ -3164,16 +3253,24 @@ function buildInterface(
       if (activeToolDragging !== "none") {
         if (activeToolDragging === "charger") {
           const dist = cablePlugGroup.position.distanceTo(chargePortPos);
-          if (dist < 0.15) {
-            cablePlugGroup.position.copy(chargePortPos);
+          if (dist < 0.12) {
+            cablePlugGroup.position.set(0.119, 1.278, 0.22);
             cablePlugGroup.rotation.set(0, 0, 0);
             isChargerPlugged = true;
+            updateCableMesh(true);
             audio.playCablePlug();
             runBatteryTest3Seconds();
           } else {
             cablePlugGroup.position.copy(chargerDockPos);
-            cablePlugGroup.rotation.set(0, 0.4, 0);
+            cablePlugGroup.rotation.set(0, 0, 0);
             isChargerPlugged = false;
+            updateCableMesh(false);
+            if (batteryTestInterval !== null) {
+              clearInterval(batteryTestInterval);
+              batteryTestInterval = null;
+            }
+            batteryLiveOverlay.hidden = true;
+            updateBatteryLcd("idle");
           }
         } else if (activeToolDragging === "magnifier") {
           if (magnifierGroup.position.distanceTo(magnifierDockPos) < 0.14) {
@@ -3265,11 +3362,29 @@ function buildInterface(
           return;
         }
 
-        const ammeterHits = raycaster.intersectObject(ammeterUnit, true);
         const plugHits = raycaster.intersectObject(cablePlugGroup, true);
         const battHits = raycaster.intersectObject(batteryTesterGroup, true);
-        if (ammeterHits.length > 0 || plugHits.length > 0 || battHits.length > 0) {
-          runBatteryTest3Seconds();
+        if (plugHits.length > 0 || battHits.length > 0) {
+          if (!isChargerPlugged) {
+            cablePlugGroup.position.set(0.119, 1.278, 0.22);
+            cablePlugGroup.rotation.set(0, 0, 0);
+            isChargerPlugged = true;
+            updateCableMesh(true);
+            audio.playCablePlug();
+            runBatteryTest3Seconds();
+          } else {
+            cablePlugGroup.position.copy(chargerDockPos);
+            cablePlugGroup.rotation.set(0, 0, 0);
+            isChargerPlugged = false;
+            updateCableMesh(false);
+            if (batteryTestInterval !== null) {
+              clearInterval(batteryTestInterval);
+              batteryTestInterval = null;
+            }
+            batteryLiveOverlay.hidden = true;
+            updateBatteryLcd("idle");
+          }
+          wakeRender(800);
           return;
         }
         const magHits = raycaster.intersectObject(magnifierGroup, true);

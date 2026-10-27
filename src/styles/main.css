@@ -294,6 +294,12 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
   color: #f87171;
 }
 
+[hidden],
+.battery-live-overlay[hidden],
+.camera-live-overlay[hidden] {
+  display: none !important;
+}
+
 /* Canlı Batarya Testi İlerleme Kartı */
 .battery-live-overlay {
   position: absolute;

@@ -95,6 +95,13 @@ export interface GeneratedCustomer {
   buyerBudget?: number | undefined;
 }
 
+export interface StockDefectEntry {
+  readonly id?: string;
+  readonly category?: InspectionCategoryId;
+  readonly title: string;
+  readonly valueLoss: number;
+}
+
 export interface StockPhoneItem {
   readonly uid: string;
   readonly brand: string;
@@ -102,9 +109,9 @@ export interface StockPhoneItem {
   readonly ageYears: number;
   readonly boughtPrice: number;
   readonly baseValue: number;
-  readonly actualValue: number;
-  readonly foundDefects: ReadonlyArray<{ title: string; valueLoss: number }>;
-  readonly missedDefects: ReadonlyArray<{ title: string; valueLoss: number }>;
+  actualValue: number;
+  foundDefects: StockDefectEntry[];
+  missedDefects: StockDefectEntry[];
   readonly dayBought: number;
 }
 
@@ -345,18 +352,18 @@ export const PHONE_MODELS: ReadonlyArray<PhoneModelTemplate> = [
 
 export const DEFECT_POOL: Readonly<Record<InspectionCategoryId, ReadonlyArray<DefectTemplate>>> = {
   battery: [
-    { id: "bat_cap", category: "battery", title: "Düşük pil sağlığı (%64 - Servis uyarısı)", lossRatio: 0.18 },
-    { id: "bat_swell", category: "battery", title: "Batarya şişmiş & hücre arızası", lossRatio: 0.25 },
-    { id: "bat_drop", category: "battery", title: "Pil sağlığı %58 (Ani voltaj düşmesi)", lossRatio: 0.28 },
+    { id: "bat_cap", category: "battery", title: "Düşük pil sağlığı (%64 - Servis uyarısı)", lossRatio: 0.20 },
+    { id: "bat_swell", category: "battery", title: "Batarya şişmiş & hücre arızası", lossRatio: 0.20 },
+    { id: "bat_drop", category: "battery", title: "Pil sağlığı %58 (Ani voltaj düşmesi)", lossRatio: 0.20 },
   ],
   screen: [
-    { id: "scr_crack", category: "screen", title: "Ön camda kılcal çatlak", lossRatio: 0.18 },
-    { id: "scr_broken", category: "screen", title: "Kırık / çatlamış ön cam paneli", lossRatio: 0.30 },
-    { id: "scr_touch", category: "screen", title: "Dokunmatik ve piksel paneli arızası", lossRatio: 0.22 },
+    { id: "scr_crack", category: "screen", title: "Ön camda kılcal çatlak", lossRatio: 0.20 },
+    { id: "scr_broken", category: "screen", title: "Kırık / çatlamış ön cam paneli", lossRatio: 0.20 },
+    { id: "scr_touch", category: "screen", title: "Dokunmatik ve piksel paneli arızası", lossRatio: 0.20 },
   ],
   camera: [
-    { id: "cam_lens", category: "camera", title: "Kamera lensinde çatlak & leke", lossRatio: 0.18 },
-    { id: "cam_sensor", category: "camera", title: "Ana kamera sensör arızası (Görüntü yok)", lossRatio: 0.24 },
+    { id: "cam_lens", category: "camera", title: "Kamera lensinde çatlak & leke", lossRatio: 0.20 },
+    { id: "cam_sensor", category: "camera", title: "Ana kamera sensör arızası (Görüntü yok)", lossRatio: 0.20 },
   ],
 };
 
@@ -439,23 +446,22 @@ export function generateCustomerEncounter(
 ): { phone: GeneratedPhone; customer: GeneratedCustomer } {
   const modelTpl = PHONE_MODELS[rng.nextInt(0, PHONE_MODELS.length - 1)] ?? PHONE_MODELS[0]!;
   const ageYears = rng.nextInt(1, 4);
-  const ageDiscount = 1 - (ageYears - 1) * 0.12;
-  const baseValue = roundTo50(modelTpl.basePrice * ageDiscount);
+  const baseValue = roundTo50(modelTpl.basePrice);
 
-  // Müşteri niyetini belirle: Satma (%45), Tamire Getirme (%35), İkinci El Almaya Gelme (%20)
+  // Müşteri niyetini belirle: Stokta telefon varsa %40 Alıcı, %35 Satıcı, %25 Tamir
   let intent: CustomerIntent = "sell";
   const intentRoll = rng.nextInt(1, 100);
   if (stockCount > 0) {
-    if (intentRoll <= 45) {
+    if (intentRoll <= 35) {
       intent = "sell";
-    } else if (intentRoll <= 75) {
+    } else if (intentRoll <= 60) {
       intent = "repair";
     } else {
       intent = "buy";
     }
   } else {
     // Stokta cihaz yoksa müşteri ya satmaya ya tamire gelir
-    intent = intentRoll <= 55 ? "sell" : "repair";
+    intent = intentRoll <= 58 ? "sell" : "repair";
   }
 
   // Arıza sayısı belirleme:
@@ -573,7 +579,7 @@ export function generateCustomerEncounter(
     buyerBudget = roundTo50(rng.nextInt(9000, 32000));
     initialAskPrice = buyerBudget;
     minAcceptPrice = roundTo50(buyerBudget * 1.15);
-    speechText = `Merhaba usta! İkinci el temiz bir ${buyerTargetBrand} telefon arıyorum. Yaklaşık ₺${buyerBudget.toLocaleString("tr-TR")} bütçem var. Vitrinde bana uygun güzel bir cihaz var mı?`;
+    speechText = `Merhaba usta! İkinci el temiz bir ${buyerTargetBrand} telefon arıyorum. Vitrinde bana önerebileceğin güzel bir cihaz var mı?`;
   }
 
   const customer: GeneratedCustomer = {

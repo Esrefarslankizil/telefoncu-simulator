@@ -1133,3 +1133,61 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
 .stock-col-market.good small { color: #7ee0a8; }
 .stock-col-market.bad b,
 .stock-col-market.bad small { color: #ff9b8a; }
+
+
+/* Telefonlar & Fiyatlar Rehberi ve Soru İşareti (?) Kutusu */
+.price-guide-actions { display: flex; align-items: center; gap: 8px; }
+.price-help-trigger {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--gold);
+  border-radius: 50%;
+  background: #e5b76526;
+  color: var(--gold);
+  font: 900 15px var(--mono);
+  cursor: pointer;
+}
+.price-help-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 1px solid #e5b76566;
+  border-radius: 12px;
+  background: #e5b76517;
+  color: #f6efe0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.price-help-box p { margin: 0; }
+.price-help-box b { color: var(--gold); }
+.price-help-mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #182420;
+  font: 900 13px var(--mono);
+}
+.price-help-box.pulse { animation: helpPulse 0.6s ease; }
+@keyframes helpPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.025); border-color: #fff; }
+}
+.price-guide-head,
+.price-guide-row { grid-template-columns: 1.6fr 1fr; }
+.stock-repair-btn {
+  margin-top: 4px;
+  padding: 4px 9px;
+  border: 1px solid var(--gold);
+  border-radius: 7px;
+  background: #e5b76524;
+  color: var(--gold);
+  font: 800 9.5px var(--mono);
+  cursor: pointer;
+}
+.stock-repair-btn:hover { background: var(--gold); color: #17231f; }
+.stock-clean-pill { color: #7ee0a8; font: 700 9.5px var(--mono); }

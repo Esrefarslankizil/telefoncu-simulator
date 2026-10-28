@@ -25,6 +25,7 @@ import type { QualityPreference } from "./core/GameStore";
 import { SeededRNG } from "./core/SeededRNG";
 import {
   DEFECT_POOL,
+  PHONE_MODELS,
   INSPECTION_CATEGORIES,
   generateCustomerEncounter,
   getBatteryRating,
@@ -507,16 +508,35 @@ function buildInterface(
   const qualityRowEl = select<HTMLElement>("[data-quality-row]");
   const toggleAudioBtn = select<HTMLButtonElement>(".toggle-audio-btn");
 
-  // Üst sol menü ve Stoktaki Telefonlar liste ekranı
+  // Üst sol menü, Stoktaki Telefonlar ve Telefonlar & Fiyatlar rehberi
   const stockMenuBtn = select<HTMLButtonElement>("[data-stock-menu-btn]");
   const stockMenuPanel = select<HTMLElement>("[data-stock-menu]");
   const stockModalEl = select<HTMLElement>("[data-stock-modal]");
+  const priceGuideModalEl = select<HTMLElement>("[data-price-guide-modal]");
   const openStockListBtn = select<HTMLButtonElement>("[data-open-stock-list]");
+  const openPriceGuideBtn = select<HTMLButtonElement>("[data-open-price-guide]");
+  const priceGuideListEl = select<HTMLElement>("[data-price-guide-list]");
+  const priceHelpBtn = select<HTMLButtonElement>("[data-price-help-btn]");
+  const priceHelpBox = select<HTMLElement>("[data-price-help-box]");
   const menuStockBadge = select<HTMLElement>("[data-menu-stock-badge]");
   const stockMenuList = select<HTMLElement>("[data-stock-list]");
   const stockMenuSummary = select<HTMLElement>("[data-stock-summary]");
   const stockMenuCount = select<HTMLElement>("[data-stock-count]");
+  let activeStockRepairUid: string | null = null;
   const formatLira = (value: number): string => `₺${Math.round(value).toLocaleString("tr-TR")}`;
+
+  priceGuideListEl.innerHTML = PHONE_MODELS.map(
+    (m, idx) => `<article class="stock-list-row price-guide-row">
+      <div class="stock-col-model">
+        <strong>${idx + 1}. ${m.brand} ${m.model}</strong>
+        <small>${m.storage} · Sorunsuz Piyasa Değeri</small>
+      </div>
+      <div class="stock-col-market good">
+        <b>${formatLira(m.basePrice)}</b>
+        <small>Sorunsuz 2. El</small>
+      </div>
+    </article>`,
+  ).join("");
 
   const renderStockMenu = (): void => {
     stockMenuCount.textContent = String(stockItems.length);
@@ -534,10 +554,15 @@ function buildInterface(
               const marketVal = getKnownStockValue(item);
               const diff = marketVal - item.boughtPrice;
               const diffSign = diff >= 0 ? "+" : "";
+              const totalDefects = item.foundDefects.length + item.missedDefects.length;
+              const repairBtnHtml =
+                totalDefects > 0
+                  ? `<button type="button" class="stock-repair-btn" data-repair-stock="${item.uid}">🔧 Tamir Et (+%${totalDefects * 20} Değer)</button>`
+                  : `<span class="stock-clean-pill">✓ Sorunsuz (Tam Değer)</span>`;
               return `<article class="stock-list-row">
                 <div class="stock-col-model">
                   <strong>${idx + 1}. ${item.brand} ${item.model}</strong>
-                  <small>${item.ageYears} Yıllık · Gün ${item.dayBought}</small>
+                  <small>${repairBtnHtml}</small>
                 </div>
                 <div class="stock-col-bought">
                   <b>${formatLira(item.boughtPrice)}</b>
@@ -551,6 +576,16 @@ function buildInterface(
             })
             .join("");
   };
+
+  stockMenuList.addEventListener("click", (event) => {
+    const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-repair-stock]");
+    if (!btn) return;
+    activeStockRepairUid = btn.dataset["repairStock"] ?? null;
+    stockModalEl.hidden = true;
+    audio.unlock();
+    audio.playTap();
+    workshop.enter();
+  });
 
   const setStockMenuOpen = (open: boolean): void => {
     stockMenuPanel.hidden = !open;
@@ -566,6 +601,7 @@ function buildInterface(
   const setStockModalOpen = (open: boolean): void => {
     stockModalEl.hidden = !open;
     if (open) {
+      priceGuideModalEl.hidden = true;
       stockMenuPanel.hidden = true;
       stockMenuBtn.setAttribute("aria-expanded", "false");
       audio.unlock();
@@ -575,15 +611,40 @@ function buildInterface(
     wakeRender(400);
   };
 
+  const setPriceGuideOpen = (open: boolean): void => {
+    priceGuideModalEl.hidden = !open;
+    if (open) {
+      stockModalEl.hidden = true;
+      stockMenuPanel.hidden = true;
+      stockMenuBtn.setAttribute("aria-expanded", "false");
+      audio.unlock();
+      audio.playTap();
+    }
+    wakeRender(400);
+  };
+
   stockMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     setStockMenuOpen(Boolean(stockMenuPanel.hidden));
   });
   openStockListBtn.addEventListener("click", () => setStockModalOpen(true));
+  openPriceGuideBtn.addEventListener("click", () => setPriceGuideOpen(true));
+  priceHelpBtn.addEventListener("click", () => {
+    audio.unlock();
+    audio.playTap();
+    priceHelpBox.classList.remove("pulse");
+    void priceHelpBox.offsetWidth;
+    priceHelpBox.classList.add("pulse");
+    notify("💡 Batarya bozuksa −%20, Ekran bozuksa −%20, Kamera bozuksa −%20 değer düşer.");
+  });
   shell.querySelector("[data-stock-menu-close]")?.addEventListener("click", () => setStockMenuOpen(false));
   shell.querySelector("[data-stock-modal-close]")?.addEventListener("click", () => setStockModalOpen(false));
+  shell.querySelector("[data-price-guide-close]")?.addEventListener("click", () => setPriceGuideOpen(false));
   stockModalEl.addEventListener("click", (event) => {
     if (event.target === stockModalEl) setStockModalOpen(false);
+  });
+  priceGuideModalEl.addEventListener("click", (event) => {
+    if (event.target === priceGuideModalEl) setPriceGuideOpen(false);
   });
   const onStockMenuOutsidePress = (event: PointerEvent): void => {
     if (stockMenuPanel.hidden) return;
@@ -1878,10 +1939,10 @@ function buildInterface(
 
       const foundDefects = ph.defects
         .filter((d) => d.found)
-        .map((d) => ({ title: d.title, valueLoss: d.valueLoss }));
+        .map((d) => ({ id: d.id, category: d.category, title: d.title, valueLoss: d.valueLoss }));
       const missedDefects = ph.defects
         .filter((d) => !d.found)
-        .map((d) => ({ title: d.title, valueLoss: d.valueLoss }));
+        .map((d) => ({ id: d.id, category: d.category, title: d.title, valueLoss: d.valueLoss }));
 
       const stockItem: StockPhoneItem = {
         uid: ph.uid,
@@ -2707,26 +2768,86 @@ function buildInterface(
     isUserDraggingPhone: () => isDraggingPhone,
     isInspecting: () => isInspecting,
     getWorkshopRepairJob: () => {
-      if (customerState !== "INTERACTING" || encounter.customer.intent !== "repair" || dealFinished || !repairAgreed) return null;
-      const phoneData = encounter.phone;
-      const targetId = encounter.customer.repairTargetDefect?.id;
-      const defect = phoneData.defects.find((item) => item.id === targetId)
-        ?? phoneData.defects.find((item) => diagnosedCategories.has(item.category));
-      if (!defect) return null;
-      return { uid: phoneData.uid, modelKey: phoneData.brand + "|" + phoneData.model, modelLabel: phoneData.brand + " " + phoneData.model, defectId: defect.id, defectCategory: defect.category, defectTitle: defect.title };
+      if (customerState === "INTERACTING" && encounter.customer.intent === "repair" && !dealFinished && repairAgreed) {
+        const phoneData = encounter.phone;
+        const targetId = encounter.customer.repairTargetDefect?.id;
+        const defect =
+          phoneData.defects.find((item) => item.id === targetId) ??
+          phoneData.defects.find((item) => diagnosedCategories.has(item.category));
+        if (defect) {
+          return {
+            uid: phoneData.uid,
+            modelKey: phoneData.brand + "|" + phoneData.model,
+            modelLabel: phoneData.brand + " " + phoneData.model,
+            defectId: defect.id,
+            defectCategory: defect.category,
+            defectTitle: defect.title,
+          };
+        }
+      }
+
+      // Stoktaki arızalı telefonları da tamir masasında onarabilme (satın alıp tamir edip pahalıya satma)
+      const stockPhone =
+        stockItems.find((s) => s.uid === activeStockRepairUid && (s.foundDefects.length > 0 || s.missedDefects.length > 0)) ??
+        stockItems.find((s) => s.foundDefects.length > 0 || s.missedDefects.length > 0);
+      if (!stockPhone) return null;
+      const d = stockPhone.foundDefects[0] ?? stockPhone.missedDefects[0]!;
+      const cat: InspectionCategoryId = d.category ?? "battery";
+      return {
+        uid: stockPhone.uid,
+        modelKey: stockPhone.brand + "|" + stockPhone.model,
+        modelLabel: stockPhone.brand + " " + stockPhone.model + " (Stok)",
+        defectId: d.id ?? "stock_defect",
+        defectCategory: cat,
+        defectTitle: d.title,
+      };
     },
     completeWorkshopRepair: (job: WorkshopRepairJob) => {
+      const stockPhone = stockItems.find((s) => s.uid === job.uid);
+      if (stockPhone) {
+        const fIdx = stockPhone.foundDefects.findIndex((d) => (d.id ?? "stock_defect") === job.defectId || d.title === job.defectTitle);
+        let restoredLoss = 0;
+        if (fIdx >= 0) {
+          restoredLoss = stockPhone.foundDefects[fIdx]!.valueLoss;
+          stockPhone.foundDefects.splice(fIdx, 1);
+        } else {
+          const mIdx = stockPhone.missedDefects.findIndex((d) => (d.id ?? "stock_defect") === job.defectId || d.title === job.defectTitle);
+          if (mIdx >= 0) {
+            restoredLoss = stockPhone.missedDefects[mIdx]!.valueLoss;
+            stockPhone.missedDefects.splice(mIdx, 1);
+          }
+        }
+        stockPhone.actualValue = Math.min(stockPhone.baseValue, stockPhone.actualValue + restoredLoss);
+        const remaining = stockPhone.foundDefects.length + stockPhone.missedDefects.length;
+        renderStockMenu();
+        renderDiagnosticArea();
+        updateHUD(store.getState());
+        notify(
+          remaining === 0
+            ? `✨ ${stockPhone.brand} ${stockPhone.model} tamamen yenilendi! Yeni piyasa değeri: ₺${stockPhone.actualValue.toLocaleString("tr-TR")}`
+            : `🔧 Parça onarıldı (+₺${restoredLoss.toLocaleString("tr-TR")} değer). Kalan arıza: ${remaining}`,
+        );
+        return;
+      }
+
       const defectIndex = encounter.phone.defects.findIndex((item) => item.id === job.defectId);
       if (defectIndex >= 0) encounter.phone.defects.splice(defectIndex, 1);
       const targetId = encounter.customer.repairTargetDefect?.id;
-      const remainingDiagnosedDefect = encounter.phone.defects.some((item) => item.id === targetId || diagnosedCategories.has(item.category));
+      const remainingDiagnosedDefect = encounter.phone.defects.some(
+        (item) => item.id === targetId || diagnosedCategories.has(item.category),
+      );
       workshopRepaired = !remainingDiagnosedDefect;
       sync3DSceneToEncounter();
       updateCustomerHeader();
       updateHUD(store.getState());
       renderDiagnosticArea();
-      notify(workshopRepaired ? "🔧 Tamir tamamlandı. Tezgâha dönüp telefonu müşteriye teslim et." : "🔧 Bu arıza onarıldı. Tezgâha dönüp sıradaki tespiti atölyede tamir et.");
-    },    returnToCounter: () => setStation("counter"),
+      notify(
+        workshopRepaired
+          ? "🔧 Tamir tamamlandı. Tezgâha dönüp telefonu müşteriye teslim et."
+          : "🔧 Bu arıza onarıldı. Tezgâha dönüp sıradaki tespiti atölyede tamir et.",
+      );
+    },
+    returnToCounter: () => setStation("counter"),
     destroy: () => {
       if (batteryTestInterval !== null) {
         clearInterval(batteryTestInterval);

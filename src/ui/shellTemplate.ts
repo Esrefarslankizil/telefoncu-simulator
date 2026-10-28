@@ -10,6 +10,10 @@ export const SHELL_HTML = `<header class="topbar">
               <span class="menu-nav-left">📱 <b>Stoktaki Telefonlar</b></span>
               <span class="menu-nav-badge" data-menu-stock-badge>0 Cihaz →</span>
             </button>
+            <button class="menu-nav-item" data-open-price-guide type="button">
+              <span class="menu-nav-left">📋 <b>Telefonlar &amp; Fiyatlar</b></span>
+              <span class="menu-nav-badge">Liste →</span>
+            </button>
           </div>
         </section>
         <div class="stock-list-backdrop" data-stock-modal hidden>
@@ -25,6 +29,26 @@ export const SHELL_HTML = `<header class="topbar">
               <span>PİYASA DEĞERİ</span>
             </div>
             <div class="stock-menu-list" data-stock-list></div>
+          </section>
+        </div>
+        <div class="stock-list-backdrop" data-price-guide-modal hidden>
+          <section class="stock-list-modal price-guide-modal" role="dialog" aria-label="Telefonlar ve Fiyatlar">
+            <header class="stock-menu-head">
+              <div><small>PİYASA REHBERİ</small><strong>Telefonlar &amp; Fiyatlar</strong></div>
+              <div class="price-guide-actions">
+                <button class="price-help-trigger" data-price-help-btn type="button" aria-label="Arıza değer kaybı kuralı" title="Değer kaybı kuralını gör">?</button>
+                <button class="stock-menu-close" data-price-guide-close type="button" aria-label="Kapat">✕</button>
+              </div>
+            </header>
+            <div class="price-help-box" data-price-help-box>
+              <span class="price-help-mark">?</span>
+              <p><b>Arıza Değer Kaybı Kuralı:</b> Aşağıdaki listede tüm telefonların <b>Sorunsuz İkinci El Fiyatı</b> yazmaktadır. Cihazda <b>batarya bozuksa fiyat %20 düşer</b>, <b>ekran bozuksa %20 düşer</b>, <b>kamera bozuksa %20 değer kaybeder</b>.</p>
+            </div>
+            <div class="stock-table-head price-guide-head">
+              <span>TELEFON MODELİ</span>
+              <span>SORUNSUZ İKİNCİ EL FİYATI</span>
+            </div>
+            <div class="stock-menu-list" data-price-guide-list></div>
           </section>
         </div>
       </div>

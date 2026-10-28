@@ -1047,3 +1047,89 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
 .diagnosis-option.rejected { border-color: #f8717188; background: #7f1d1d44; }
 .diagnosis-option:not(:disabled):hover { border-color: var(--gold); background: #e5b7651f; }
 .diagnosis-side-panel { max-height: calc(100vh - 140px); overflow-y: auto; }
+
+
+/* Menü açılır listesi ve Stoktaki Telefonlar ekranı */
+.menu-nav-list { display: grid; gap: 7px; }
+.menu-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid #f3e9d526;
+  border-radius: 12px;
+  background: #ffffff0a;
+  color: var(--cream);
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.menu-nav-item:hover { border-color: var(--gold); background: #e5b7651f; }
+.menu-nav-left { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+.menu-nav-badge {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: #e5b76524;
+  color: var(--gold);
+  font: 800 10px var(--mono);
+}
+
+.stock-list-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: #09110fcc;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.stock-list-backdrop[hidden] { display: none !important; }
+.stock-list-modal {
+  width: min(620px, calc(100vw - 28px));
+  max-height: min(78vh, 620px);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 18px;
+  border: 1px solid #e5b76566;
+  border-radius: 18px;
+  background: #14231ff5;
+  box-shadow: 0 24px 64px #0009;
+}
+.stock-table-head {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #f3e9d522;
+  color: #b9b7a8;
+  font: 800 9.5px var(--mono);
+  letter-spacing: .1em;
+}
+.stock-table-head span:nth-child(2),
+.stock-table-head span:nth-child(3) { text-align: right; }
+.stock-list-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid #f3e9d51c;
+  border-radius: 12px;
+  background: #ffffff08;
+}
+.stock-col-model strong { display: block; font-size: 13.5px; color: #fff6e6; }
+.stock-col-model small { color: #b9b7a8; font: 9.5px var(--mono); }
+.stock-col-bought,
+.stock-col-market { text-align: right; }
+.stock-col-bought b,
+.stock-col-market b { display: block; font: 800 13px var(--mono); color: #fff6e6; }
+.stock-col-bought small,
+.stock-col-market small { font: 9px var(--mono); color: #b9b7a8; }
+.stock-col-market.good b,
+.stock-col-market.good small { color: #7ee0a8; }
+.stock-col-market.bad b,
+.stock-col-market.bad small { color: #ff9b8a; }

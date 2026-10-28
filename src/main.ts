@@ -507,9 +507,12 @@ function buildInterface(
   const qualityRowEl = select<HTMLElement>("[data-quality-row]");
   const toggleAudioBtn = select<HTMLButtonElement>(".toggle-audio-btn");
 
-  // Üst sol menü: stoktaki telefonları listeler
+  // Üst sol menü ve Stoktaki Telefonlar liste ekranı
   const stockMenuBtn = select<HTMLButtonElement>("[data-stock-menu-btn]");
   const stockMenuPanel = select<HTMLElement>("[data-stock-menu]");
+  const stockModalEl = select<HTMLElement>("[data-stock-modal]");
+  const openStockListBtn = select<HTMLButtonElement>("[data-open-stock-list]");
+  const menuStockBadge = select<HTMLElement>("[data-menu-stock-badge]");
   const stockMenuList = select<HTMLElement>("[data-stock-list]");
   const stockMenuSummary = select<HTMLElement>("[data-stock-summary]");
   const stockMenuCount = select<HTMLElement>("[data-stock-count]");
@@ -518,21 +521,33 @@ function buildInterface(
   const renderStockMenu = (): void => {
     stockMenuCount.textContent = String(stockItems.length);
     stockMenuCount.hidden = stockItems.length === 0;
-    if (stockMenuPanel.hidden) return;
+    menuStockBadge.textContent = `${stockItems.length} Cihaz →`;
+    if (stockModalEl.hidden) return;
     const totalCost = stockItems.reduce((sum, item) => sum + item.boughtPrice, 0);
-    const totalKnown = stockItems.reduce((sum, item) => sum + getKnownStockValue(item), 0);
-    stockMenuSummary.innerHTML = `<span>${stockItems.length} CİHAZ</span><span>MALİYET ${formatLira(totalCost)}</span><span>TAHMİNİ DEĞER ${formatLira(totalKnown)}</span>`;
+    const totalMarket = stockItems.reduce((sum, item) => sum + getKnownStockValue(item), 0);
+    stockMenuSummary.innerHTML = `<span>TOPLAM ${stockItems.length} TELEFON</span><span>TOPLAM ALIŞ: ${formatLira(totalCost)}</span><span>TOPLAM PİYASA DEĞERİ: ${formatLira(totalMarket)}</span>`;
     stockMenuList.innerHTML =
       stockItems.length === 0
-        ? `<p class="stock-menu-empty">Stokta telefon yok. Müşteriden telefon aldığında burada görünür.</p>`
+        ? `<p class="stock-menu-empty">Stokta henüz telefon yok. Müşteriden telefon satın aldığında burada listelenir.</p>`
         : stockItems
-            .map((item) => {
-              const known = getKnownStockValue(item);
-              const profit = known - item.boughtPrice;
-              const defects = item.foundDefects.length > 0
-                ? item.foundDefects.map((d) => `<i>${d.title}</i>`).join("")
-                : `<i class="clean">Bilinen arıza yok</i>`;
-              return `<article class="stock-menu-item"><div class="stock-menu-model"><strong>${item.brand} ${item.model}</strong><small>${item.ageYears} yaşında · Gün ${item.dayBought}</small></div><div class="stock-menu-prices"><span>Alış ${formatLira(item.boughtPrice)}</span><b class="${profit >= 0 ? "good" : "bad"}">Değer ${formatLira(known)}</b></div><div class="stock-menu-defects">${defects}</div></article>`;
+            .map((item, idx) => {
+              const marketVal = getKnownStockValue(item);
+              const diff = marketVal - item.boughtPrice;
+              const diffSign = diff >= 0 ? "+" : "";
+              return `<article class="stock-list-row">
+                <div class="stock-col-model">
+                  <strong>${idx + 1}. ${item.brand} ${item.model}</strong>
+                  <small>${item.ageYears} Yıllık · Gün ${item.dayBought}</small>
+                </div>
+                <div class="stock-col-bought">
+                  <b>${formatLira(item.boughtPrice)}</b>
+                  <small>Aldığı Fiyat</small>
+                </div>
+                <div class="stock-col-market ${diff >= 0 ? "good" : "bad"}">
+                  <b>${formatLira(marketVal)}</b>
+                  <small>${diffSign}${formatLira(diff)} fark</small>
+                </div>
+              </article>`;
             })
             .join("");
   };
@@ -547,11 +562,29 @@ function buildInterface(
     }
     wakeRender(400);
   };
+
+  const setStockModalOpen = (open: boolean): void => {
+    stockModalEl.hidden = !open;
+    if (open) {
+      stockMenuPanel.hidden = true;
+      stockMenuBtn.setAttribute("aria-expanded", "false");
+      audio.unlock();
+      audio.playTap();
+      renderStockMenu();
+    }
+    wakeRender(400);
+  };
+
   stockMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     setStockMenuOpen(Boolean(stockMenuPanel.hidden));
   });
+  openStockListBtn.addEventListener("click", () => setStockModalOpen(true));
   shell.querySelector("[data-stock-menu-close]")?.addEventListener("click", () => setStockMenuOpen(false));
+  shell.querySelector("[data-stock-modal-close]")?.addEventListener("click", () => setStockModalOpen(false));
+  stockModalEl.addEventListener("click", (event) => {
+    if (event.target === stockModalEl) setStockModalOpen(false);
+  });
   const onStockMenuOutsidePress = (event: PointerEvent): void => {
     if (stockMenuPanel.hidden) return;
     const target = event.target;

@@ -2,12 +2,31 @@
 export const SHELL_HTML = `<header class="topbar">
       <div class="brand">
 
-        <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Stoktaki telefonları gör"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
-        <section class="stock-menu-panel" data-stock-menu role="dialog" aria-label="Stoktaki telefonlar" hidden>
-          <header class="stock-menu-head"><div><small>MENÜ</small><strong>Stoktaki Telefonlar</strong></div><button class="stock-menu-close" data-stock-menu-close type="button" aria-label="Kapat">✕</button></header>
-          <div class="stock-menu-summary" data-stock-summary></div>
-          <div class="stock-menu-list" data-stock-list></div>
+        <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Menüyü aç"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
+        <section class="stock-menu-panel" data-stock-menu role="menu" aria-label="Ana Menü" hidden>
+          <header class="stock-menu-head"><div><small>CEP DÜKKÂNI</small><strong>Menü</strong></div><button class="stock-menu-close" data-stock-menu-close type="button" aria-label="Kapat">✕</button></header>
+          <div class="menu-nav-list">
+            <button class="menu-nav-item" data-open-stock-list type="button">
+              <span class="menu-nav-left">📱 <b>Stoktaki Telefonlar</b></span>
+              <span class="menu-nav-badge" data-menu-stock-badge>0 Cihaz →</span>
+            </button>
+          </div>
         </section>
+        <div class="stock-list-backdrop" data-stock-modal hidden>
+          <section class="stock-list-modal" role="dialog" aria-label="Stoktaki Telefonlar">
+            <header class="stock-menu-head">
+              <div><small>ENVANTER LİSTESİ</small><strong>Stoktaki Telefonlar</strong></div>
+              <button class="stock-menu-close" data-stock-modal-close type="button" aria-label="Kapat">✕</button>
+            </header>
+            <div class="stock-menu-summary" data-stock-summary></div>
+            <div class="stock-table-head">
+              <span>TELEFON MODELİ</span>
+              <span>ALDIĞI FİYAT</span>
+              <span>PİYASA DEĞERİ</span>
+            </div>
+            <div class="stock-menu-list" data-stock-list></div>
+          </section>
+        </div>
       </div>
       <div class="stats">
         <div><small>TOPLAM BAKİYE</small><b data-money></b></div>

@@ -1,29 +1,19 @@
 import {
   AmbientLight,
-  BufferGeometry,
-  BoxGeometry,
   CanvasTexture,
-  CatmullRomCurve3,
   Color,
-  CylinderGeometry,
   DirectionalLight,
   Group,
   Mesh,
-  MeshBasicMaterial,
-  MeshPhysicalMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
   Plane,
-  PlaneGeometry,
   Scene,
-  SphereGeometry,
   Raycaster,
-  TubeGeometry,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
-import type { Material, Object3D } from "three";
 import "./styles/main.css";
 import { AssetLoader } from "./assets/AssetLoader";
 import { AudioSystem } from "./core/AudioSystem";
@@ -44,7 +34,6 @@ import {
 import type {
   BatteryRating,
   CustomerIntent,
-  GeneratedPhone,
   InspectionCategoryId,
   StockPhoneItem,
 } from "./data/PhoneCatalog";
@@ -52,498 +41,14 @@ import { DebugOverlay } from "./debug/DebugOverlay";
 import { QualityManager } from "./performance/QualityManager";
 import { SaveSystem } from "./persistence/SaveSystem";
 import { OrientationManager } from "./core/OrientationManager";
-
-type StationId = "counter" | "repair" | "display" | "stock";
-
-const STATIONS: ReadonlyArray<{ id: StationId; title: string; description: string }> = [
-  { id: "counter", title: "KASA", description: "Tezgâhta birinci şahıs" },
-  { id: "repair", title: "CİHAZI İNCELE", description: "Yakın plan 4 kontrol" },
-  { id: "display", title: "VİTRİN", description: "Satış & stok rafı" },
-  { id: "stock", title: "DEPO", description: "Yedek parça & durum" },
-];
-
-const mats: Material[] = [];
-const geometries: BufferGeometry[] = [];
-
-// Paylaşılan temel geometriler
-const unitBoxGeo = new BoxGeometry(1, 1, 1);
-const unitCylGeo = new CylinderGeometry(1, 1, 1, 14);
-const unitSphereGeo = new SphereGeometry(1, 12, 8);
-geometries.push(unitBoxGeo, unitCylGeo, unitSphereGeo);
-
-/** Tezgâh üzerindeki antistatik mat için "CEP DÜKKÂNI" logolu ve alet yuvalı dinamik kanvas dokusu */
-function createWorkbenchMatTexture(): CanvasTexture {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1024;
-  canvas.height = 1024;
-  const ctx = canvas.getContext("2d")!;
-
-  // Antistatik koyu yeşil kauçuk zemin
-  ctx.fillStyle = "#102622";
-  ctx.fillRect(0, 0, 1024, 1024);
-
-  // Kılavuz ızgarası
-  ctx.strokeStyle = "#183a34";
-  ctx.lineWidth = 1.5;
-  for (let x = 32; x < 1024; x += 36) {
-    ctx.beginPath();
-    ctx.moveTo(x, 32);
-    ctx.lineTo(x, 992);
-    ctx.stroke();
-  }
-  for (let y = 32; y < 1024; y += 36) {
-    ctx.beginPath();
-    ctx.moveTo(32, y);
-    ctx.lineTo(992, y);
-    ctx.stroke();
-  }
-
-  // Dış çerçeve cetvel şeritleri
-  ctx.strokeStyle = "#d7a958";
-  ctx.lineWidth = 4;
-  ctx.strokeRect(32, 32, 960, 960);
-
-  ctx.fillStyle = "#d7a958";
-  ctx.font = "bold 13px monospace";
-  for (let x = 50; x <= 970; x += 50) {
-    ctx.fillRect(x - 1, 32, 2, 12);
-    ctx.fillRect(x - 1, 980, 2, 12);
-    ctx.fillText(`${(x - 50) / 10}cm`, x - 12, 58);
-  }
-
-  // Sol alet yuvaları (Büyüteç ve Tornavida)
-  ctx.strokeStyle = "#38bdf888";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
-  ctx.strokeRect(55, 170, 260, 340);
-  ctx.fillStyle = "#38bdf8aa";
-  ctx.font = "bold 15px sans-serif";
-  ctx.fillText("🔍 BÜYÜTEÇ DOKU", 85, 205);
-
-  ctx.strokeStyle = "#a78bfa88";
-  ctx.strokeRect(55, 540, 260, 360);
-  ctx.fillStyle = "#a78bfaaa";
-  ctx.fillText("🪛 TORNAVİDA DOKU", 85, 575);
-
-  // Sağ alet yuvası (Batarya Test Aleti)
-  ctx.strokeStyle = "#f59e0b88";
-  ctx.strokeRect(709, 170, 260, 730);
-  ctx.fillStyle = "#f59e0baa";
-  ctx.fillText("⚡ BATARYA TEST CİHAZI", 725, 205);
-  ctx.font = "12px monospace";
-  ctx.fillText("Şarj & Akım Analizörü", 745, 230);
-
-  // Orta telefon kılavuz çerçevesi
-  ctx.strokeStyle = "#94a3b866";
-  ctx.strokeRect(386, 220, 252, 530);
-  ctx.setLineDash([]);
-  ctx.fillStyle = "#94a3b888";
-  ctx.font = "bold 13px monospace";
-  ctx.fillText("📱 CİHAZ EKSPERTİZ ALANI", 408, 250);
-
-  // Üstte ve altta büyük oyun logosu ve ismi: "CEP DÜKKÂNI"
-  ctx.fillStyle = "#f3ca7f";
-  ctx.font = "900 38px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("CEP DÜKKÂNI", 512, 115);
-
-  ctx.fillStyle = "#94d2bd";
-  ctx.font = "bold 15px monospace";
-  ctx.fillText("PROFESYONEL TELEFON EKSPERTİZ & TAMİR TEZGÂHI", 512, 142);
-
-  // Alt ESD Logosu
-  ctx.fillStyle = "#d7a95899";
-  ctx.font = "bold 14px monospace";
-  ctx.fillText("⚡ ESD SAFE ANTISTATIC WORKSTATION · AGY-2026", 512, 950);
-
-  const texture = new CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  return texture;
-}
-
-/** Telefon camındaki gerçekçi kılcal çatlak veya büyük kırıkları çizen fonksiyon */
-function drawGlassCracks(ctx: CanvasRenderingContext2D, isMajor: boolean, uid: string): void {
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.lineJoin = "bevel";
-
-  // Sabit ve tutarlı pozisyonlar için UID'den türetilen basit tohum
-  let seed = 0;
-  for (let i = 0; i < uid.length; i++) {
-    seed = (seed * 31 + uid.charCodeAt(i)) % 10000;
-  }
-  const pseudoRng = (offset: number) => {
-    const x = Math.sin(seed + offset) * 10000;
-    return x - Math.floor(x);
-  };
-
-  if (isMajor) {
-    // 1. BÜYÜK KIRIK / ÖRÜMCEK AĞI PARÇALANMIŞ CAM (Büyük Kırıklar)
-    const impactX = 140 + Math.floor(pseudoRng(1) * 230);
-    const impactY = 280 + Math.floor(pseudoRng(2) * 360);
-
-    // Ezilmiş cam çekirdeği (Impact core)
-    const impactGrad = ctx.createRadialGradient(impactX, impactY, 2, impactX, impactY, 32);
-    impactGrad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
-    impactGrad.addColorStop(0.3, "rgba(230, 245, 255, 0.75)");
-    impactGrad.addColorStop(0.7, "rgba(180, 210, 230, 0.45)");
-    impactGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = impactGrad;
-    ctx.beginPath();
-    ctx.arc(impactX, impactY, 32, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Dairesel örümcek ağı halkaları
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
-    ctx.lineWidth = 1.6;
-    for (const r of [18, 36, 62, 95]) {
-      ctx.beginPath();
-      for (let a = 0; a <= Math.PI * 2; a += 0.28) {
-        const rad = r + Math.sin(a * 5.2 + seed) * (r * 0.16);
-        const px = impactX + Math.cos(a) * rad;
-        const py = impactY + Math.sin(a) * rad;
-        if (a === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.stroke();
-    }
-
-    // Ana yayılım kırık hatları (10 adet dışa yayılan kesik hat)
-    const angles = [0.15, 0.65, 1.25, 1.85, 2.5, 3.15, 3.8, 4.45, 5.1, 5.75];
-    for (let idx = 0; idx < angles.length; idx++) {
-      const ang = angles[idx]!;
-      let curX = impactX + Math.cos(ang) * 14;
-      let curY = impactY + Math.sin(ang) * 14;
-      const rayLen = 160 + pseudoRng(idx * 7) * 260;
-
-      ctx.beginPath();
-      ctx.moveTo(curX, curY);
-
-      let dist = 0;
-      let curAngle = ang;
-      while (dist < rayLen) {
-        const step = 20 + pseudoRng(dist + idx) * 22;
-        dist += step;
-        curAngle += (pseudoRng(dist * 3 + idx) - 0.48) * 0.4;
-        curX += Math.cos(curAngle) * step;
-        curY += Math.sin(curAngle) * step;
-
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-        ctx.lineWidth = Math.max(2.0, 3.8 - (dist / rayLen) * 2.0);
-        ctx.lineTo(curX, curY);
-      }
-      ctx.stroke();
-
-      // Üst parlak ışık kırılması hattı
-      curX = impactX + Math.cos(ang) * 14;
-      curY = impactY + Math.sin(ang) * 14;
-      dist = 0;
-      curAngle = ang;
-      ctx.beginPath();
-      ctx.moveTo(curX, curY);
-      while (dist < rayLen) {
-        const step = 20 + pseudoRng(dist + idx) * 22;
-        dist += step;
-        curAngle += (pseudoRng(dist * 3 + idx) - 0.48) * 0.4;
-        curX += Math.cos(curAngle) * step;
-        curY += Math.sin(curAngle) * step;
-
-        ctx.strokeStyle = "rgba(240, 248, 255, 0.9)";
-        ctx.lineWidth = Math.max(1.1, 2.2 - (dist / rayLen) * 1.2);
-        ctx.lineTo(curX, curY);
-      }
-      ctx.stroke();
-    }
-  } else {
-    // 2. KÜÇÜK VE KILCAL ÇATLAKLAR (Genellikle küçük, ince çizgiler)
-    const crackSets = [
-      [
-        { x: 42, y: 180 },
-        { x: 105, y: 235 },
-        { x: 175, y: 270 },
-        { x: 250, y: 320 },
-        { x: 310, y: 385 },
-        { x: 360, y: 440 },
-      ],
-      [
-        { x: 175, y: 270 },
-        { x: 215, y: 240 },
-        { x: 270, y: 215 },
-        { x: 320, y: 195 },
-      ],
-      [
-        { x: 480, y: 650 },
-        { x: 410, y: 695 },
-        { x: 335, y: 735 },
-        { x: 260, y: 790 },
-      ],
-    ];
-
-    for (const path of crackSets) {
-      // Gölge / derinlik çizgisi
-      ctx.beginPath();
-      ctx.moveTo(path[0]!.x, path[0]!.y);
-      for (let i = 1; i < path.length; i++) {
-        ctx.lineTo(path[i]!.x, path[i]!.y);
-      }
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.4)";
-      ctx.lineWidth = 2.4;
-      ctx.stroke();
-
-      // İnce ve keskin parlak kılcal çizgi
-      ctx.beginPath();
-      ctx.moveTo(path[0]!.x, path[0]!.y);
-      for (let i = 1; i < path.length; i++) {
-        ctx.lineTo(path[i]!.x, path[i]!.y);
-      }
-      ctx.strokeStyle = "rgba(240, 248, 255, 0.92)";
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-    }
-  }
-
-  ctx.restore();
-}
-
-/** Telefon ekranının 2B arayüzünü (Kilit ekranı, Fotoğraf uygulaması / zemin vizörü) dinamik çizen fonksiyon */
-function renderSmartphoneScreen(
-  canvas: HTMLCanvasElement,
-  ph: GeneratedPhone,
-  powerOn: boolean,
-  inCameraApp: boolean,
-  cameraWorking: boolean,
-  shutterFlash: boolean,
-): void {
-  const ctx = canvas.getContext("2d")!;
-  ctx.clearRect(0, 0, 512, 1024);
-
-  if (!powerOn) {
-    // KAPALI EKRAN (OLED Siyah)
-    ctx.fillStyle = "#070b10";
-    ctx.fillRect(0, 0, 512, 1024);
-
-    // Çift dokunma rehber ikonu
-    ctx.fillStyle = "#e5b765aa";
-    ctx.font = "bold 28px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("👆👆", 256, 480);
-    ctx.font = "bold 20px monospace";
-    ctx.fillText("ÇİFT DOKUNARAK AÇ", 256, 520);
-    ctx.fillStyle = "#94a3b844";
-    ctx.font = "14px monospace";
-    ctx.fillText("Telefonu açmak için ekrana 2 kez tıkla", 256, 550);
-  } else if (inCameraApp) {
-    // KAMERA / FOTOĞRAF UYGULAMASI EKRANI
-    if (cameraWorking) {
-      // 1. KAMERA SAĞLAM: ZEMİN VE LOGOYU GÖRÜYOR!
-      ctx.fillStyle = "#112623";
-      ctx.fillRect(0, 0, 512, 1024);
-
-      // Kılavuz ızgaraları
-      ctx.strokeStyle = "#1b403a";
-      ctx.lineWidth = 2;
-      for (let x = 0; x < 512; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, 1024);
-        ctx.stroke();
-      }
-      for (let y = 0; y < 1024; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(512, y);
-        ctx.stroke();
-      }
-
-      // Kameranın gördüğü zemin logosu
-      ctx.fillStyle = "#d7a958cc";
-      ctx.font = "900 32px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("CEP DÜKKÂNI", 256, 420);
-      ctx.font = "bold 15px monospace";
-      ctx.fillStyle = "#94d2bd";
-      ctx.fillText("MASA VE ZEMİN GÖRÜLÜYOR", 256, 455);
-      ctx.fillStyle = "#cbd5e188";
-      ctx.fillText("⚡ ANTISTATIC WORKSTATION", 256, 485);
-
-      // Otomatik Odaklama Çerçevesi
-      ctx.strokeStyle = "#10b981";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(176, 360, 160, 160);
-      ctx.fillStyle = "#10b981";
-      ctx.font = "bold 16px monospace";
-      ctx.fillText("✓ SENSÖR NET · 60 FPS", 256, 550);
-      ctx.fillText("✓ KAMERA SAĞLAM", 256, 580);
-    } else {
-      // 2. KAMERA ARIZALI: SİMSİYAH EKRAN VE HATA MESAJI!
-      ctx.fillStyle = "#030712";
-      ctx.fillRect(0, 0, 512, 1024);
-
-      // Parazit çizgisi
-      ctx.strokeStyle = "#ef444455";
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 6; i++) {
-        ctx.beginPath();
-        ctx.moveTo(0, 200 + i * 80);
-        ctx.lineTo(512, 205 + i * 80);
-        ctx.stroke();
-      }
-
-      ctx.fillStyle = "#f87171";
-      ctx.font = "bold 26px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("⚠ KAMERA HATASI", 256, 420);
-      ctx.fillStyle = "#fca5a5";
-      ctx.font = "bold 16px monospace";
-      ctx.fillText("Görüntü Yok (Zemin Görülemiyor)", 256, 460);
-      ctx.font = "14px sans-serif";
-      ctx.fillStyle = "#94a3b8";
-      ctx.fillText("Kamera sensörü veya flex kablosu kopuk!", 256, 495);
-      ctx.fillStyle = "#ef4444";
-      ctx.font = "bold 15px monospace";
-      ctx.fillText("✗ KAMERA ARIZALI", 256, 540);
-    }
-
-    if (shutterFlash) {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, 512, 1024);
-    } else {
-      // Kamera vizör üst çubuğu
-      ctx.fillStyle = "#000000cc";
-      ctx.fillRect(0, 0, 512, 120);
-      ctx.fillStyle = "#f3eee1";
-      ctx.font = "bold 18px monospace";
-      ctx.textAlign = "left";
-      ctx.fillText("📸 KAMERA VİZÖRÜ", 24, 65);
-      ctx.textAlign = "right";
-      ctx.fillStyle = "#f87171";
-      ctx.font = "bold 22px sans-serif";
-      ctx.fillText("✕ ÇIK", 488, 65);
-
-      // Kamera vizör alt çubuğu ve Deklanşör butonu
-      ctx.fillStyle = "#000000cc";
-      ctx.fillRect(0, 840, 512, 184);
-      ctx.beginPath();
-      ctx.arc(256, 920, 44, 0, Math.PI * 2);
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 4;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(256, 920, 36, 0, Math.PI * 2);
-      ctx.fillStyle = "#ffffff";
-      ctx.fill();
-    }
-  } else {
-    // AÇIK EKRAN (Ana Ekran / Home Screen)
-    const grad = ctx.createLinearGradient(0, 0, 512, 1024);
-    grad.addColorStop(0, "#0c3b37");
-    grad.addColorStop(0.5, "#14253d");
-    grad.addColorStop(1, "#1e1338");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 1024);
-
-    // Üst Durum Çubuğu (Status Bar)
-    ctx.fillStyle = "#f3eee1";
-    ctx.font = "bold 22px sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("12:45", 36, 56);
-    ctx.textAlign = "right";
-    ctx.font = "18px monospace";
-    ctx.fillText("5G  WiFi  🔋%86", 476, 56);
-
-    // Dinamik Ada / Çentik
-    ctx.fillStyle = "#000000";
-    ctx.beginPath();
-    ctx.roundRect(196, 26, 120, 36, 18);
-    ctx.fill();
-
-    // Büyük Saat & Tarih Widget
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "900 80px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("12:45", 256, 220);
-    ctx.font = "bold 20px sans-serif";
-    ctx.fillStyle = "#cbd5e1";
-    ctx.fillText("Pazartesi, 26 Ekim", 256, 265);
-
-    // Model etiketi
-    ctx.fillStyle = "#d7a958cc";
-    ctx.font = "bold 15px monospace";
-    ctx.fillText(`${ph.brand} OS`, 256, 305);
-
-    // Uygulama Simgeleri Tablosu
-    // 1. 📸 KAMERA / FOTOĞRAF UYGULAMASI (ÖN PLANDA!)
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.roundRect(70, 560, 100, 100, 22);
-    ctx.fill();
-    ctx.fillStyle = "#1e293b";
-    ctx.font = "46px sans-serif";
-    ctx.fillText("📸", 120, 628);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 15px sans-serif";
-    ctx.fillText("Kamera", 120, 685);
-    ctx.fillStyle = "#d7a958";
-    ctx.font = "bold 11px monospace";
-    ctx.fillText("TEST ET", 120, 702);
-
-    // 2. 📞 Telefon
-    ctx.fillStyle = "#22c55e";
-    ctx.beginPath();
-    ctx.roundRect(190, 560, 100, 100, 22);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "44px sans-serif";
-    ctx.fillText("📞", 240, 628);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 15px sans-serif";
-    ctx.fillText("Telefon", 240, 685);
-
-    // 3. 💬 Mesajlar
-    ctx.fillStyle = "#3b82f6";
-    ctx.beginPath();
-    ctx.roundRect(310, 560, 100, 100, 22);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "44px sans-serif";
-    ctx.fillText("💬", 360, 628);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 15px sans-serif";
-    ctx.fillText("Mesajlar", 360, 685);
-
-    // 4. ⚙️ Ayarlar
-    ctx.fillStyle = "#64748b";
-    ctx.beginPath();
-    ctx.roundRect(430, 560, 60, 100, 22);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "34px sans-serif";
-    ctx.fillText("⚙", 460, 628);
-
-    // Alt Kısayol Göstergesi
-    ctx.fillStyle = "#ffffff22";
-    ctx.beginPath();
-    ctx.roundRect(40, 760, 432, 60, 14);
-    ctx.fill();
-    ctx.fillStyle = "#d7a958";
-    ctx.font = "bold 14px monospace";
-    ctx.fillText("📸 'Kamera' simgesine dokunarak test et", 256, 796);
-
-    // Alt swipe çubuğu
-    ctx.fillStyle = "#ffffffbb";
-    ctx.beginPath();
-    ctx.roundRect(186, 980, 140, 6, 3);
-    ctx.fill();
-  }
-
-  // EN ÜST KATMAN: Cam Kırıkları & Kılcal Çatlaklar (Telefon açıkken de kapalıyken de cam yüzeyinde görünür)
-  const scrDef = ph.defects.find((d) => d.category === "screen");
-  if (scrDef) {
-    const isMajor = scrDef.id === "scr_broken";
-    drawGlassCracks(ctx, isMajor, ph.uid);
-  }
-}
+import { RepairWorkshop } from "./workshop/RepairWorkshop";
+import type { WorkshopRepairJob } from "./workshop/RepairWorkshop";
+import type { StationId } from "./config/stations";
+import { STATIONS } from "./config/stations";
+import { mats, geometries } from "./scene/resources";
+import { buildShopScene } from "./scene/ShopScene";
+import { renderSmartphoneScreen } from "./scene/textures/smartphoneScreen";
+import { SHELL_HTML } from "./ui/shellTemplate";
 
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLElement>("#app");
@@ -589,572 +94,42 @@ async function bootstrap(): Promise<void> {
   keyLight.castShadow = false;
   scene.add(keyLight);
 
-  const material = (color: string, roughness = 0.8, metalness = 0): MeshStandardMaterial => {
-    const value = new MeshStandardMaterial({ color, roughness, metalness });
-    mats.push(value);
-    return value;
-  };
-  const wood = material("#8b5638");
-  const darkWood = material("#402b25");
-  const wall = material("#c7b99e");
-  const teal = material("#1c5550");
-  const black = material("#0f172a", 0.3, 0.3);
-  const gold = material("#d7a958", 0.36, 0.48);
-  const green = material("#477553");
-  const warnMat = material("#e59952", 0.35, 0.15);
-  const badMat = material("#d9534f", 0.35, 0.15);
-  const metalColor = material("#718096", 0.4, 0.6);
-
-  const addBox = (
-    parent: Object3D,
-    size: [number, number, number],
-    position: [number, number, number],
-    mat: Material,
-  ): Mesh => {
-    const mesh = new Mesh(unitBoxGeo, mat);
-    mesh.scale.set(...size);
-    mesh.position.set(...position);
-    parent.add(mesh);
-    return mesh;
-  };
-  const addCylinder = (
-    parent: Object3D,
-    radius: number,
-    height: number,
-    position: [number, number, number],
-    mat: Material,
-  ): Mesh => {
-    const mesh = new Mesh(unitCylGeo, mat);
-    mesh.scale.set(radius, height, radius);
-    mesh.position.set(...position);
-    parent.add(mesh);
-    return mesh;
-  };
-  const addSphere = (
-    parent: Object3D,
-    size: [number, number, number],
-    position: [number, number, number],
-    mat: Material,
-  ): Mesh => {
-    const mesh = new Mesh(unitSphereGeo, mat);
-    mesh.scale.set(...size);
-    mesh.position.set(...position);
-    parent.add(mesh);
-    return mesh;
-  };
-
-  // Zemin
-  const floorGeo = new PlaneGeometry(14, 14);
-  geometries.push(floorGeo);
-  const floor = new Mesh(floorGeo, material("#b5a58b"));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(0, -0.035, 1.2);
-  scene.add(floor);
-
-  // Arka Duvar (Oyuncunun arkasında, z = -2.85)
-  addBox(scene, [14, 6, 0.25], [0, 3, -2.85], wall);
-  addBox(scene, [13.8, 0.16, 0.18], [0, 5.6, -2.72], darkWood);
-  addBox(scene, [3.2, 0.9, 0.16], [0, 4.55, -2.7], teal);
-  addBox(scene, [2.75, 0.08, 0.2], [0, 4.13, -2.58], gold);
-
-  // Ön Duvar ve Cam Giriş Kapısı (Müşterilerin geldiği yer, z = 5.5)
-  addBox(scene, [5.5, 6, 0.25], [-4.25, 3, 5.5], wall);
-  addBox(scene, [5.5, 6, 0.25], [4.25, 3, 5.5], wall);
-  addBox(scene, [3.0, 1.8, 0.25], [0, 5.1, 5.5], wall);
-  addBox(scene, [2.6, 4.25, 0.12], [0, 2.1, 5.48], darkWood);
-  addBox(scene, [2.3, 3.95, 0.06], [0, 2.1, 5.5], material("#8fc7c2", 0.2, 0.05));
-  addBox(scene, [0.08, 0.6, 0.15], [-0.15, 1.9, 5.42], gold);
-  addBox(scene, [0.08, 0.6, 0.15], [0.15, 1.9, 5.42], gold);
-  addBox(scene, [2.4, 0.35, 0.16], [0, 4.35, 5.38], teal);
-  addBox(scene, [2.1, 0.06, 0.18], [0, 4.16, 5.34], gold);
-
-  // Yan Duvarlar
-  addBox(scene, [0.25, 6, 12], [-6.8, 3, 1.4], wall);
-  addBox(scene, [0.25, 6, 12], [6.8, 3, 1.4], wall);
-
-  // Raflar ve kutulu aksesuarlar
-  for (const x of [-5.35, -3.9, 3.9, 5.35]) {
-    const shelfUnit = addBox(scene, [1.15, 3.15, 0.35], [x, 2.0, -2.35], darkWood);
-    shelfUnit.userData["stationTarget"] = x > 0 ? "display" : "stock";
-    for (const y of [0.95, 1.8, 2.65, 3.48]) {
-      addBox(scene, [1.35, 0.1, 0.58], [x, y, -2.12], wood);
-      for (let i = 0; i < 3; i += 1) {
-        const box = addBox(
-          scene,
-          [0.25, 0.35, 0.23],
-          [x - 0.4 + i * 0.38, y + 0.22, -2.02],
-          i % 2 === 0 ? teal : gold,
-        );
-        box.rotation.z = (i - 1) * 0.08;
-        box.userData["stationTarget"] = x > 0 ? "display" : "stock";
-      }
-    }
-  }
-
-  // Tezgâh (Oyuncunun hemen önünde)
-  const counterMain = addBox(scene, [5.8, 1.15, 0.95], [0, 0.58, 0.25], wood);
-  counterMain.userData["stationTarget"] = "counter";
-  const counterTop = addBox(scene, [6.05, 0.12, 1.15], [0, 1.2, 0.24], darkWood);
-  counterTop.userData["stationTarget"] = "counter";
-
-  // Tezgâh üstü antistatik telefon inceleme matı ("CEP DÜKKÂNI" logolu ve yuvalı)
-  const matTexture = createWorkbenchMatTexture();
-  const matPadMat = new MeshStandardMaterial({
-    map: matTexture,
-    roughness: 0.85,
-    metalness: 0.08,
-  });
-  mats.push(matPadMat);
-  const matPad = addBox(scene, [0.86, 0.012, 0.58], [0, 1.266, 0.22], matPadMat);
-  matPad.userData["stationTarget"] = "repair";
-
-  // =========================================================================
-  // TEZGÂHTAKİ FİZİKSEL TEST ALETLERİ (3D)
-  // Sadece Batarya Test Cihazı ve Büyüteç (Gereksiz kalabalık kutular kaldırıldı)
-  // =========================================================================
-  const ammeterUnit = new Group();
-  ammeterUnit.visible = false;
-  scene.add(ammeterUnit);
-  const ammeterDisplayMat = material("#0d9488", 0.2, 0.1);
-
-  // 1. Batarya Test Cihazı & Canlı LCD Ekranı (Telefonun sağında z=0.22 ekseninde 180° tam yatay hat)
-  const batteryTesterGroup = new Group();
-  batteryTesterGroup.position.set(0.32, 1.272, 0.22);
-  scene.add(batteryTesterGroup);
-
-  const battBody = addBox(batteryTesterGroup, [0.12, 0.038, 0.10], [0, 0.019, 0], material("#1e293b", 0.35, 0.5));
-  battBody.userData["stationTarget"] = "repair";
-  battBody.userData["benchTool"] = "battery";
-
-  const bumperL = addBox(batteryTesterGroup, [0.01, 0.040, 0.102], [-0.06, 0.019, 0], teal);
-  bumperL.userData["stationTarget"] = "repair";
-  bumperL.userData["benchTool"] = "battery";
-  const bumperR = addBox(batteryTesterGroup, [0.01, 0.040, 0.102], [0.06, 0.019, 0], teal);
-  bumperR.userData["stationTarget"] = "repair";
-  bumperR.userData["benchTool"] = "battery";
-
-  // Kablo çıkış soketi / burcu (telefona bakan sol yüzde, x=-0.064, y=0.019, z=0)
-  const socketCollar = addCylinder(batteryTesterGroup, 0.007, 0.012, [-0.064, 0.019, 0], material("#0f172a", 0.3, 0.2));
-  socketCollar.rotation.z = Math.PI / 2;
-  socketCollar.userData["stationTarget"] = "repair";
-  socketCollar.userData["benchTool"] = "battery";
-
-  // 3B Cihaz üzerindeki dinamik dijital LCD gösterge
-  const battLcdCanvas = document.createElement("canvas");
-  battLcdCanvas.width = 256;
-  battLcdCanvas.height = 128;
-  const battLcdCtx = battLcdCanvas.getContext("2d")!;
-  const battLcdTexture = new CanvasTexture(battLcdCanvas);
-  const battLcdMat = new MeshBasicMaterial({ map: battLcdTexture });
-  mats.push(battLcdMat);
-
-  const updateBatteryLcd = (
-    state: "idle" | "testing" | "done",
-    progress = 0,
-    isHealthy = true,
-    healthPct = 98,
-  ): void => {
-    battLcdCtx.clearRect(0, 0, 256, 128);
-
-    if (state === "idle") {
-      battLcdCtx.fillStyle = "#081c17";
-      battLcdCtx.fillRect(0, 0, 256, 128);
-      battLcdCtx.fillStyle = "#10b981";
-      battLcdCtx.font = "bold 19px monospace";
-      battLcdCtx.textAlign = "center";
-      battLcdCtx.fillText("BATARYA TEST CİHAZI", 128, 42);
-      battLcdCtx.fillStyle = "#facc15";
-      battLcdCtx.font = "bold 15px monospace";
-      battLcdCtx.fillText("Kabloyu Telefona Tak", 128, 76);
-      battLcdCtx.fillStyle = "#94a3b8";
-      battLcdCtx.font = "12px monospace";
-      battLcdCtx.fillText("5.1V / 0.0A HAZIR", 128, 106);
-    } else if (state === "testing") {
-      battLcdCtx.fillStyle = "#08202d";
-      battLcdCtx.fillRect(0, 0, 256, 128);
-      battLcdCtx.fillStyle = "#38bdf8";
-      battLcdCtx.font = "bold 19px monospace";
-      battLcdCtx.textAlign = "center";
-      battLcdCtx.fillText(`ÖLÇÜM: %${progress}`, 128, 38);
-
-      battLcdCtx.fillStyle = "#03151b";
-      battLcdCtx.fillRect(28, 56, 200, 20);
-      battLcdCtx.fillStyle = "#38bdf8";
-      battLcdCtx.fillRect(28, 56, Math.round(200 * (progress / 100)), 20);
-
-      battLcdCtx.fillStyle = "#cbd5e1";
-      battLcdCtx.font = "13px monospace";
-      battLcdCtx.fillText("Hücre & Akım Analizi...", 128, 104);
-    } else {
-      const rating: BatteryRating = getBatteryRating(healthPct, !isHealthy);
-      let bg = "#07301c";
-      let headerColor = "#4ade80";
-      let ratingColor = "#86efac";
-
-      if (rating === "ÇOK KÖTÜ") {
-        bg = "#3b0c0c";
-        headerColor = "#f87171";
-        ratingColor = "#fca5a5";
-      } else if (rating === "KÖTÜ") {
-        bg = "#3a1908";
-        headerColor = "#fb923c";
-        ratingColor = "#fed7aa";
-      } else if (rating === "ORTA") {
-        bg = "#332a08";
-        headerColor = "#facc15";
-        ratingColor = "#fef08a";
-      } else if (rating === "İYİ") {
-        bg = "#07301c";
-        headerColor = "#4ade80";
-        ratingColor = "#86efac";
-      } else if (rating === "ÇOK İYİ") {
-        bg = "#08332a";
-        headerColor = "#22d3ee";
-        ratingColor = "#67e8f9";
-      }
-
-      battLcdCtx.fillStyle = bg;
-      battLcdCtx.fillRect(0, 0, 256, 128);
-      battLcdCtx.fillStyle = headerColor;
-      battLcdCtx.font = "bold 17px monospace";
-      battLcdCtx.textAlign = "center";
-      const icon = rating === "ÇOK KÖTÜ" || rating === "KÖTÜ" ? "⚠" : "✓";
-      battLcdCtx.fillText(`${icon} ANALİZ TAMAMLANDI`, 128, 36);
-      battLcdCtx.fillStyle = "#ffffff";
-      battLcdCtx.font = "900 24px monospace";
-      battLcdCtx.fillText(`PİL: %${healthPct}`, 128, 72);
-      battLcdCtx.fillStyle = ratingColor;
-      battLcdCtx.font = "bold 15px monospace";
-      battLcdCtx.fillText(`DURUM: ${rating}`, 128, 106);
-    }
-    battLcdTexture.needsUpdate = true;
-    wakeRender(120);
-  };
-  updateBatteryLcd("idle");
-
-  const battLcd = addBox(batteryTesterGroup, [0.095, 0.003, 0.060], [0, 0.039, 0], battLcdMat);
-  battLcd.userData["stationTarget"] = "repair";
-  battLcd.userData["benchTool"] = "battery";
-
-  // Şarj Kablosu ve Type-C Fiş Grubu (Batarya test probu)
-  const cablePlugGroup = new Group();
-  cablePlugGroup.position.set(0.23, 1.274, 0.22);
-  cablePlugGroup.rotation.set(0, 0, 0);
-  scene.add(cablePlugGroup);
-
-  const plugHandle = addBox(cablePlugGroup, [0.032, 0.012, 0.022], [0, 0.006, 0], material("#334155", 0.4, 0.3));
-  plugHandle.userData["stationTarget"] = "repair";
-  plugHandle.userData["benchTool"] = "charger";
-
-  const plugPin = addBox(cablePlugGroup, [0.015, 0.005, 0.014], [-0.023, 0.006, 0], metalColor);
-  plugPin.userData["stationTarget"] = "repair";
-  plugPin.userData["benchTool"] = "charger";
-
-  const plugBoot = addCylinder(cablePlugGroup, 0.005, 0.010, [0.021, 0.006, 0], material("#0f172a", 0.3, 0.2));
-  plugBoot.rotation.z = Math.PI / 2;
-  plugBoot.userData["stationTarget"] = "repair";
-  plugBoot.userData["benchTool"] = "charger";
-
-  // Batarya test cihazından fişe uzanan 3B Dinamik Kablo
-  const cableMat = material("#0f172a", 0.45, 0.15);
-  mats.push(cableMat);
-
-  const buildCableCurve = (pStart: Vector3, pEnd: Vector3, isPlugged: boolean): CatmullRomCurve3 => {
-    if (isPlugged) {
-      const pMid = new Vector3((pStart.x + pEnd.x) * 0.5, 1.280, pStart.z);
-      return new CatmullRomCurve3([pStart, pMid, pEnd]);
-    }
-    const midX = (pStart.x + pEnd.x) * 0.5;
-    const dist = Math.hypot(pStart.x - pEnd.x, pStart.z - pEnd.z);
-    const midZ = (pStart.z + pEnd.z) * 0.5 + Math.min(0.045, Math.max(0.01, dist * 0.28));
-    const midY = 1.276;
-    return new CatmullRomCurve3([pStart, new Vector3(midX, midY, midZ), pEnd]);
-  };
-
-  const initialPStart = new Vector3(0.32 - 0.064, 1.280, 0.22);
-  const initialPEnd = new Vector3(0.23 + 0.021, 1.280, 0.22);
-  let cableGeo = new TubeGeometry(buildCableCurve(initialPStart, initialPEnd, false), 16, 0.0035, 6, false);
-  geometries.push(cableGeo);
-  const cableMesh = new Mesh(cableGeo, cableMat);
-  scene.add(cableMesh);
-
-  const updateCableMesh = (isPlugged: boolean): void => {
-    const pStart = new Vector3(batteryTesterGroup.position.x - 0.064, 1.280, batteryTesterGroup.position.z);
-    const pEnd = new Vector3(cablePlugGroup.position.x + 0.021, 1.280, cablePlugGroup.position.z);
-    cableGeo.dispose();
-    cableGeo = new TubeGeometry(buildCableCurve(pStart, pEnd, isPlugged), 16, 0.0035, 6, false);
-    cableMesh.geometry = cableGeo;
-  };
-
-  // 2. Büyüteç (Şeffaf camlı ve altın çerçeveli - Ekranda kılcal çatlak ve kırıkları aramak için)
-  const magnifierGroup = new Group();
-  magnifierGroup.position.set(-0.28, 1.274, 0.22);
-  magnifierGroup.rotation.y = 0.1;
-  scene.add(magnifierGroup);
-
-  const magRim = addCylinder(magnifierGroup, 0.046, 0.008, [0, 0.006, 0], gold);
-  magRim.userData["stationTarget"] = "repair";
-  magRim.userData["benchTool"] = "magnifier";
-
-  // Tamamen şeffaf cam mercek (Altındaki ekranı ve çatlakları net gösterir)
-  const magLensMat = new MeshPhysicalMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.18,
-    roughness: 0.02,
-    metalness: 0.05,
-    transmission: 0.96,
-    ior: 1.52,
-    depthWrite: false,
-  });
-  mats.push(magLensMat);
-  const magLensGeo = new CylinderGeometry(0.043, 0.043, 0.003, 28);
-  geometries.push(magLensGeo);
-  const magLens = new Mesh(magLensGeo, magLensMat);
-  magLens.position.set(0, 0.006, 0);
-  magLens.userData["stationTarget"] = "repair";
-  magLens.userData["benchTool"] = "magnifier";
-  magnifierGroup.add(magLens);
-
-  const magHandle = addCylinder(magnifierGroup, 0.009, 0.11, [0, 0.006, -0.08], darkWood);
-  magHandle.rotation.x = Math.PI / 2;
-  magHandle.userData["stationTarget"] = "repair";
-  magHandle.userData["benchTool"] = "magnifier";
-
-
-
-  // Masa üstü aksesuarları (Kasa POS cihazı, çalışma lambası)
-  const posBase = addBox(scene, [0.38, 0.16, 0.28], [2.2, 1.34, 0.2], metalColor);
-  posBase.rotation.y = -0.3;
-  addBox(scene, [0.26, 0.04, 0.16], [2.2, 1.44, 0.22], teal).rotation.y = -0.3;
-
-  const lampBase = addCylinder(scene, 0.14, 0.04, [-2.2, 1.28, 0.2], darkWood);
-  lampBase.rotation.y = 0.2;
-  addCylinder(scene, 0.02, 0.52, [-2.2, 1.54, 0.2], gold);
-  const lampHead = addCylinder(scene, 0.16, 0.18, [-2.1, 1.78, 0.22], teal);
-  lampHead.rotation.z = -0.45;
-
-  // Sol tamir masası ve sağ vitrin bitkisi
-  const benchBody = addBox(scene, [3.2, 0.72, 1.25], [-4.8, 0.38, 0.2], darkWood);
-  benchBody.userData["stationTarget"] = "stock";
-  const benchTop = addBox(scene, [3.35, 0.12, 1.38], [-4.8, 0.8, 0.2], wood);
-  benchTop.userData["stationTarget"] = "stock";
-
-  addCylinder(scene, 0.32, 0.12, [-5.15, 0.45, 1.5], teal);
-  addCylinder(scene, 0.06, 0.85, [-5.15, 0.0, 1.5], darkWood);
-  addCylinder(scene, 0.25, 0.32, [5.45, 0.16, 1.2], gold);
-  const plant = new Group();
-  scene.add(plant);
-  addCylinder(plant, 0.2, 0.4, [5.45, 0.52, 1.2], darkWood);
-  const leafGeo = new SphereGeometry(0.22, 6, 4);
-  geometries.push(leafGeo);
-  for (let i = 0; i < 5; i += 1) {
-    const leaf = new Mesh(leafGeo, green);
-    leaf.position.set(
-      5.45 + Math.cos(i * 1.25) * 0.17,
-      0.82 + (i % 2) * 0.13,
-      1.2 + Math.sin(i * 1.25) * 0.12,
-    );
-    leaf.scale.set(0.55, 1.45, 0.55);
-    scene.add(leaf);
-  }
-
-  // Müşteri Figürü (Gövde, bacaklar, kollar, yüz)
-  const customer = new Group();
-  scene.add(customer);
-  const skin = material("#c8916b");
-  const hair = material("#382c28");
-  const jacket = material("#294947");
-  const pantsMat = material("#374151");
-  const shoesMat = material("#1f2937");
-  const shirt = material("#e6d6b8");
-  const faceDetail = material("#49352f", 0.64);
-  const eyeWhite = material("#f3eee1", 0.45);
-
-  const legLeft = addBox(customer, [0.15, 0.72, 0.16], [-0.17, 0.42, 0], pantsMat);
-  const legRight = addBox(customer, [0.15, 0.72, 0.16], [0.17, 0.42, 0], pantsMat);
-  addBox(customer, [0.16, 0.1, 0.24], [-0.17, 0.05, 0.04], shoesMat);
-  addBox(customer, [0.16, 0.1, 0.24], [0.17, 0.05, 0.04], shoesMat);
-
-  const torsoMesh = addSphere(customer, [0.58, 0.54, 0.36], [0, 1.15, 0], jacket);
-  torsoMesh.userData["stationTarget"] = "counter";
-  addSphere(customer, [0.13, 0.05, 0.04], [0, 1.48, 0.19], shirt);
-
-  const armLeft = addCylinder(customer, 0.075, 0.58, [-0.38, 1.2, 0.05], jacket);
-  armLeft.rotation.z = -0.3;
-  const armRight = addCylinder(customer, 0.075, 0.58, [0.38, 1.2, 0.05], jacket);
-  armRight.rotation.z = 0.3;
-  addSphere(customer, [0.08, 0.05, 0.07], [-0.44, 0.92, 0.14], skin);
-  addSphere(customer, [0.08, 0.05, 0.07], [0.44, 0.92, 0.14], skin);
-
-  const neckGeo = new CylinderGeometry(0.09, 0.12, 0.3, 10);
-  geometries.push(neckGeo);
-  const neck = new Mesh(neckGeo, skin);
-  neck.position.set(0, 1.55, 0);
-  customer.add(neck);
-
-  const headMesh = addSphere(customer, [0.24, 0.28, 0.24], [0, 1.82, 0], skin);
-  headMesh.userData["stationTarget"] = "counter";
-  addSphere(customer, [0.05, 0.08, 0.05], [-0.24, 1.82, 0], skin);
-  addSphere(customer, [0.05, 0.08, 0.05], [0.24, 1.82, 0], skin);
-  addSphere(customer, [0.26, 0.15, 0.25], [0, 2.01, 0], hair);
-  addSphere(customer, [0.08, 0.17, 0.1], [-0.19, 1.9, 0], hair);
-  addSphere(customer, [0.08, 0.17, 0.1], [0.19, 1.9, 0], hair);
-
-  for (const eyeX of [-0.09, 0.09]) {
-    addSphere(customer, [0.04, 0.03, 0.018], [eyeX, 1.85, 0.22], eyeWhite);
-    addSphere(customer, [0.016, 0.02, 0.012], [eyeX + 0.006, 1.85, 0.235], faceDetail);
-    const brow = addBox(customer, [0.08, 0.016, 0.025], [eyeX, 1.91, 0.22], hair);
-    brow.rotation.z = eyeX < 0 ? -0.08 : 0.08;
-  }
-  addSphere(customer, [0.038, 0.06, 0.055], [0, 1.78, 0.25], skin);
-  addSphere(customer, [0.055, 0.024, 0.02], [-0.04, 1.74, 0.24], faceDetail);
-  addSphere(customer, [0.055, 0.024, 0.02], [0.04, 1.74, 0.24], faceDetail);
-  addBox(customer, [0.08, 0.012, 0.018], [0, 1.71, 0.22], faceDetail);
-
-  customer.position.set(0, 0, 5.2);
-  customer.rotation.y = Math.PI;
-  customer.visible = false;
-
-  // =========================================================================
-  // GERÇEKÇİ, KOMPAKT AKILLI TELEFON 3D MODELİ
-  // Boyutlar: En ~0.19m (7.5cm), Boy ~0.38m (15cm), Kalınlık ~0.016m (8mm)
-  // iPhone (Amasya Elması), Samsung (SamSam), Pixel (Gözlem Piksel) kamera modülleri
-  // =========================================================================
-  const phone = new Group();
-  phone.position.set(0, 1.278, 0.22);
-  phone.rotation.x = -0.05;
-  phone.visible = false;
-  scene.add(phone);
-
-  const phoneFrameMat = material("#334155", 0.35, 0.7); // Alüminyum / Titanyum şasi
-  const phoneBackMat = material("#1e293b", 0.2, 0.1);  // Parlak arka cam kapak
-  const phoneScreenCanvas = document.createElement("canvas");
-  phoneScreenCanvas.width = 512;
-  phoneScreenCanvas.height = 1024;
-  const phoneScreenTexture = new CanvasTexture(phoneScreenCanvas);
-  const phoneScreenMat = material("#ffffff", 0.2, 0.05); // OLED ekran
-  phoneScreenMat.map = phoneScreenTexture;
-  phoneScreenMat.emissiveMap = phoneScreenTexture;
-  phoneScreenMat.emissive = new Color(0xffffff);
-  phoneScreenMat.emissiveIntensity = 0.95;
-  const cameraBumpMat = material("#1e293b", 0.3, 0.3); // Kamera adası
-  const lensGlassMat = material("#05080c", 0.08, 0.95); // Yansımalı lens camı
-  const lensRimMat = material("#94a3b8", 0.25, 0.85);   // Metalik lens halkası
-
-  // 1. Metal Yan Şasi (Alüminyum / Titanyum çerçeve)
-  const phoneBody = addBox(phone, [0.19, 0.016, 0.38], [0, 0, 0], phoneFrameMat);
-
-  // 2. Arka Cam Panel
-  const phoneBack = addBox(phone, [0.184, 0.003, 0.374], [0, -0.009, 0], phoneBackMat);
-
-  // 3. Ön OLED Ekran (İnce çerçeveli)
-  const screen = addBox(phone, [0.178, 0.003, 0.368], [0, 0.009, 0], phoneScreenMat);
-
-  // 4. Ekran Üstü Dinamik Ada / Çentik ve Ahize yarığı
-  addBox(phone, [0.038, 0.002, 0.011], [0, 0.011, -0.165], black);
-  addBox(phone, [0.035, 0.002, 0.003], [0, 0.011, -0.182], darkWood);
-
-  // 5. Yan Tuşlar (Ses tuşları sol yanda, Güç tuşu sağ yanda üst kısımda)
-  addBox(phone, [0.003, 0.005, 0.035], [0.096, 0, -0.08], phoneFrameMat);
-  addBox(phone, [0.003, 0.005, 0.07], [-0.096, 0, -0.04], phoneFrameMat);
-
-  // 6. Sağ Yan Type-C Şarj Girişi (Batarya test cihazıyla 180° tam hizalı hat)
-  addBox(phone, [0.004, 0.007, 0.026], [0.096, 0, 0], black);
-  addBox(phone, [0.002, 0.009, 0.030], [0.0955, 0, 0], metalColor);
-
-  // Alt Hoparlör & Mikrofon Izgaraları
-  addBox(phone, [0.028, 0.003, 0.003], [-0.05, 0, 0.191], black);
-  addBox(phone, [0.028, 0.003, 0.003], [0.05, 0, 0.191], black);
-
-  // 7. Kamera Modülleri
-  const createLensRing = (parent: Object3D, x: number, z: number, r: number): void => {
-    const rim = addCylinder(parent, r, 0.005, [x, -0.004, z], lensRimMat);
-    rim.rotation.x = Math.PI / 2;
-    const lens = addCylinder(parent, r * 0.76, 0.006, [x, -0.0042, z], lensGlassMat);
-    lens.rotation.x = Math.PI / 2;
-  };
-
-  // A1) Elma (Amasya iElma Pro) Üçgen Kamera Adası
-  const elmaCamGroup = new Group();
-  elmaCamGroup.position.set(-0.045, -0.011, -0.135);
-  phone.add(elmaCamGroup);
-  addBox(elmaCamGroup, [0.072, 0.005, 0.072], [0, 0, 0], cameraBumpMat);
-  createLensRing(elmaCamGroup, -0.018, -0.018, 0.016);
-  createLensRing(elmaCamGroup, -0.018, 0.018, 0.016);
-  createLensRing(elmaCamGroup, 0.018, 0, 0.016);
-  addBox(elmaCamGroup, [0.008, 0.002, 0.008], [0.018, -0.0035, -0.02], gold);
-  addBox(elmaCamGroup, [0.006, 0.002, 0.006], [0.018, -0.0035, 0.02], black);
-
-  // A2) Elma Duo (Amasya iElma Duo) Çapraz Çift Lens Modülü
-  const elmaDuoCamGroup = new Group();
-  elmaDuoCamGroup.position.set(-0.045, -0.011, -0.135);
-  phone.add(elmaDuoCamGroup);
-  addBox(elmaDuoCamGroup, [0.065, 0.005, 0.065], [0, 0, 0], cameraBumpMat);
-  createLensRing(elmaDuoCamGroup, -0.015, -0.015, 0.016);
-  createLensRing(elmaDuoCamGroup, 0.015, 0.015, 0.016);
-  addBox(elmaDuoCamGroup, [0.006, 0.002, 0.006], [0.015, -0.0035, -0.015], gold);
-
-  // B) SamSam Galaksi 3'lü Dikey Lensler
-  const samsamCamGroup = new Group();
-  samsamCamGroup.position.set(-0.058, -0.011, 0);
-  phone.add(samsamCamGroup);
-  createLensRing(samsamCamGroup, 0, -0.155, 0.015);
-  createLensRing(samsamCamGroup, 0, -0.122, 0.015);
-  createLensRing(samsamCamGroup, 0, -0.089, 0.015);
-  addBox(samsamCamGroup, [0.007, 0.002, 0.007], [0.022, -0.003, -0.138], gold);
-
-  // C) Şaomi Büyük Dairesel Modül (Ultra & Pro)
-  const shaomiCamGroup = new Group();
-  shaomiCamGroup.position.set(0, -0.011, -0.13);
-  phone.add(shaomiCamGroup);
-  const shaomiDisc = addCylinder(shaomiCamGroup, 0.048, 0.007, [0, -0.0035, 0], cameraBumpMat);
-  shaomiDisc.rotation.x = Math.PI / 2;
-  createLensRing(shaomiCamGroup, -0.018, -0.018, 0.015);
-  createLensRing(shaomiCamGroup, 0.018, -0.018, 0.015);
-  createLensRing(shaomiCamGroup, 0, 0.018, 0.015);
-
-  // D) Redmi Dikdörtgen Şık Modül
-  const redmiCamGroup = new Group();
-  redmiCamGroup.position.set(-0.046, -0.011, -0.13);
-  phone.add(redmiCamGroup);
-  addBox(redmiCamGroup, [0.066, 0.006, 0.092], [0, 0, 0], cameraBumpMat);
-  createLensRing(redmiCamGroup, 0, -0.026, 0.019);
-  createLensRing(redmiCamGroup, -0.015, 0.022, 0.012);
-  createLensRing(redmiCamGroup, 0.015, 0.022, 0.012);
-
-  // E) Poco Geniş Sarı/Karbon Vizör Şeridi
-  const pocoCamGroup = new Group();
-  pocoCamGroup.position.set(0, -0.011, -0.13);
-  phone.add(pocoCamGroup);
-  addBox(pocoCamGroup, [0.188, 0.007, 0.07], [0, 0, 0], cameraBumpMat);
-  addBox(pocoCamGroup, [0.07, 0.003, 0.05], [0.045, -0.004, 0], material("#eab308", 0.4, 0.2));
-  createLensRing(pocoCamGroup, -0.055, -0.014, 0.014);
-  createLensRing(pocoCamGroup, -0.055, 0.014, 0.014);
-  createLensRing(pocoCamGroup, -0.018, 0, 0.016);
-
-  // 8. İnce ve Gerçekçi Arıza Göstergeleri (Gerçekçi boyutlara tam uyarlanmış)
-  const crack1 = addBox(phone, [0.0025, 0.003, 0.22], [0.02, 0.011, -0.02], material("#f1f5f9", 0.1, 0.9));
-  crack1.rotation.y = -0.55;
-  crack1.visible = false;
-  const crack2 = addBox(phone, [0.0025, 0.003, 0.14], [-0.03, 0.011, 0.06], material("#e2e8f0", 0.1, 0.9));
-  crack2.rotation.y = 0.65;
-  crack2.visible = false;
-
-  const batteryMarker = addBox(phone, [0.12, 0.008, 0.18], [0, -0.013, 0.03], warnMat);
-  batteryMarker.visible = false;
-
-  const bodyMarker = addBox(phone, [0.003, 0.008, 0.03], [0.096, 0, 0.06], badMat);
-  bodyMarker.visible = false;
-
-  const funcMarker = addBox(phone, [0.04, 0.004, 0.04], [-0.045, -0.016, -0.135], badMat);
-  funcMarker.visible = false;
-
-  const phoneHit = addBox(phone, [0.26, 0.06, 0.44], [0, 0, 0], material("#ffffff", 1, 0));
-  (phoneHit.material as MeshStandardMaterial).transparent = true;
-  (phoneHit.material as MeshStandardMaterial).opacity = 0;
-  phoneHit.userData["interactivePhone"] = true;
-
+  const {
+    phone,
+    phoneBody,
+    phoneBack,
+    screen,
+    crack1,
+    crack2,
+    batteryMarker,
+    bodyMarker,
+    funcMarker,
+    phoneFrameMat,
+    phoneBackMat,
+    phoneScreenMat,
+    cameraBumpMat,
+    elmaCamGroup,
+    elmaDuoCamGroup,
+    samsamCamGroup,
+    shaomiCamGroup,
+    redmiCamGroup,
+    pocoCamGroup,
+    jacket,
+    customer,
+    legLeft,
+    legRight,
+    armLeft,
+    armRight,
+    headMesh,
+    ammeterUnit,
+    ammeterDisplayMat,
+    cablePlugGroup,
+    batteryTesterGroup,
+    phoneScreenCanvas,
+    phoneScreenTexture,
+    updateBatteryLcd,
+    updateCableMesh,
+  } = buildShopScene(scene, wakeRender);
   const events = new EventBus<GameEvents>();
   const store = new GameStore(events);
   const saveSystem = new SaveSystem(store, events);
@@ -1165,6 +140,13 @@ async function bootstrap(): Promise<void> {
   const qualityManager = new QualityManager(renderer, events, store.getState().settings.quality);
   const assetLoader = new AssetLoader(renderer, events);
   const debugOverlay = new DebugOverlay(renderer);
+  let ui: ShopUiHandle | null = null;
+  const workshop = new RepairWorkshop({
+    uiRoot, shopScene: scene, phone, phoneBack, phoneScreen: screen, store, audio,
+    getRepairJob: () => ui?.getWorkshopRepairJob() ?? null,
+    onRepairComplete: (job) => ui?.completeWorkshopRepair(job),
+    onSceneChange: (active) => { if (!active) ui?.returnToCounter(); wakeRender(1800); },
+  });
 
   // Birinci şahıs kamera hedefleri
   const camTargetPos = new Vector3(0, 1.68, -0.85);
@@ -1182,7 +164,7 @@ async function bootstrap(): Promise<void> {
     wakeRender(1500);
   });
 
-  const ui = buildInterface(
+  ui = buildInterface(
     uiRoot,
     store,
     saveSystem,
@@ -1217,7 +199,6 @@ async function bootstrap(): Promise<void> {
     ammeterUnit,
     ammeterDisplayMat,
     cablePlugGroup,
-    magnifierGroup,
     batteryTesterGroup,
     phoneScreenCanvas,
     phoneScreenTexture,
@@ -1235,6 +216,7 @@ async function bootstrap(): Promise<void> {
       wakeRender(900);
     },
     wakeRender,
+    workshop,
     camera,
     scene,
   );
@@ -1256,7 +238,7 @@ async function bootstrap(): Promise<void> {
     {
       fixedUpdate: (seconds) => {
         ui.updateTick(seconds);
-        if (phone.visible && !ui.isInspecting() && !ui.isUserDraggingPhone()) {
+        if (!workshop.isWorkshopActive && phone.visible && !ui!.isInspecting() && !ui!.isUserDraggingPhone()) {
           phone.rotation.y += seconds * 0.16;
         }
       },
@@ -1271,12 +253,12 @@ async function bootstrap(): Promise<void> {
         qualityManager.recordFrame(frameDelta);
         previousRenderTime = now;
 
-        if (ui.isInspecting()) {
+        if (!workshop.isWorkshopActive && ui!.isInspecting()) {
           camera.up.set(0, 0, -1);
           camera.position.lerp(camTargetPos, 0.18);
           camCurrentLook.lerp(camTargetLook, 0.18);
           camera.lookAt(camCurrentLook);
-        } else {
+        } else if (!workshop.isWorkshopActive) {
           camera.up.set(0, 1, 0);
           camera.position.lerp(camTargetPos, 0.14);
           const desiredLook = new Vector3(
@@ -1288,7 +270,7 @@ async function bootstrap(): Promise<void> {
           camera.lookAt(camCurrentLook);
         }
 
-        renderer.render(scene, camera);
+        renderer.render(workshop.isWorkshopActive ? workshop.scene : scene, workshop.isWorkshopActive ? workshop.camera : camera);
         debugOverlay.update(frameDelta);
       },
     },
@@ -1298,6 +280,7 @@ async function bootstrap(): Promise<void> {
   const onResize = (): void => {
     camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
     camera.updateProjectionMatrix();
+    workshop.resize(window.innerWidth, window.innerHeight);
     wakeRender(1000);
   };
   const onPageHide = (): void => {
@@ -1306,6 +289,7 @@ async function bootstrap(): Promise<void> {
     qualityManager.destroy();
     assetLoader.destroy();
     debugOverlay.destroy();
+    workshop.destroy();
     unsubscribeSettings();
     saveSystem.destroy();
     ui.destroy();
@@ -1324,6 +308,9 @@ interface ShopUiHandle {
   updateTick: (deltaSeconds: number) => void;
   isUserDraggingPhone: () => boolean;
   isInspecting: () => boolean;
+  getWorkshopRepairJob: () => WorkshopRepairJob | null;
+  completeWorkshopRepair: (job: WorkshopRepairJob) => void;
+  returnToCounter: () => void;
   destroy: () => void;
 }
 
@@ -1362,7 +349,6 @@ function buildInterface(
   ammeterUnit: Group,
   ammeterDisplayMat: MeshStandardMaterial,
   cablePlugGroup: Group,
-  magnifierGroup: Group,
   batteryTesterGroup: Group,
   phoneScreenCanvas: HTMLCanvasElement,
   phoneScreenTexture: CanvasTexture,
@@ -1378,6 +364,7 @@ function buildInterface(
   resetLookOffset: () => void,
   applyLookDrag: (dx: number, dy: number) => void,
   wakeRender: (ms?: number) => void,
+  workshop: RepairWorkshop,
   camera: PerspectiveCamera,
   scene: Scene,
 ): ShopUiHandle {
@@ -1397,14 +384,13 @@ function buildInterface(
   let inCameraApp = false;
   let shutterFlash = false;
   let batteryTestInterval: number | null = null;
-  let activeToolDragging: "none" | "charger" | "magnifier" = "none";
+  let activeToolDragging: "none" | "charger" = "none";
   let lastPhoneTapTime = 0;
   let isSpeechBubbleOpen = false;
   let typewriterTimer: number | null = null;
   let selectedStockIdx = 0;
 
   const chargerDockPos = new Vector3(0.23, 1.274, 0.22);
-  const magnifierDockPos = new Vector3(-0.28, 1.274, 0.22);
   const chargePortPos = new Vector3(0.096, 1.278, 0.22);
   const benchPlane = new Plane(new Vector3(0, 1, 0), -1.274);
 
@@ -1417,6 +403,17 @@ function buildInterface(
         ? roundTo50(encounter.customer.initialAskPrice * 0.95)
         : encounter.customer.initialAskPrice;
   let dealFinished = false;
+  let repairAgreed = false;
+  let workshopRepaired = false;
+  let bubbleAction: "inspect" | "offer" | "reject" | "close" = "close";
+  let falseDiagnosisClaimed = false;
+  let pendingPlayerOfferText = "";
+  const diagnosedCategories = new Set<InspectionCategoryId>();
+  const diagnosisOptions: ReadonlyArray<{ id: InspectionCategoryId; label: string }> = [
+    { id: "screen", label: "Ekran kırık" },
+    { id: "camera", label: "Kamera bozuk" },
+    { id: "battery", label: "Batarya zayıf" },
+  ];
   let station: StationId = "counter";
 
   let lastTransactionSummary: {
@@ -1456,149 +453,7 @@ function buildInterface(
 
   const shell = document.createElement("div");
   shell.className = "game-ui";
-  shell.innerHTML = `<header class="topbar">
-      <div class="brand">
-        <span class="brand-mark" aria-label="Telefon tamir logosu">
-          <svg viewBox="0 0 32 32" aria-hidden="true">
-            <rect x="7" y="3" width="14" height="25" rx="2.5"></rect>
-            <path d="M11 6h6M13 24.5h2"></path>
-            <path d="m18 17 7.5 7.5M25.5 13.5a4.5 4.5 0 0 1-5.8 5.8l-6.3 6.3a1.7 1.7 0 0 1-2.4-2.4l6.3-6.3a4.5 4.5 0 0 1 5.8-5.8l-2.5 2.5.4 2.1 2.1.4z"></path>
-          </svg>
-        </span>
-        <div><b>CEP DÜKKÂNI</b><small>BİRİNCİ ŞAHIS · TEZGÂHTASIN</small></div>
-      </div>
-      <div class="stats">
-        <div><small>KASA</small><b data-money></b></div>
-        <div><small>İTİBAR</small><b data-rep></b></div>
-        <div><small>GÜN · SAAT</small><b data-day></b></div>
-      </div>
-      <button class="icon-btn fullscreen-toggle" aria-label="Tam Ekran ve Yatay Mod" title="Tam Ekran (Yatay Mod)">⛶</button>
-      <button class="icon-btn settings-open" aria-label="Ayarlar ve Gün Sonu">⚙</button>
-    </header>
-
-    <section class="customer-card">
-      <div class="customer-avatar" data-customer-initials>⏳</div>
-      <div class="customer-copy">
-        <div class="eyebrow" data-customer-eyebrow>DÜKKÂN SAKİN · MÜŞTERİ BEKLENİYOR</div>
-        <strong data-customer-name>Tezgâhta Bekliyorsun</strong>
-        <span data-customer-request>Sıradaki müşteri kapıdan girmek üzere...</span>
-      </div>
-      <button class="quiet-btn next-customer" title="Beklemeden hemen çağır">🔔 KAPIDAN ÇAĞIR</button>
-    </section>
-
-    <div class="scene-label">
-      <span class="live-dot"></span> <span data-shop-status>DÜKKÂN AÇIK</span>
-      <span class="scene-tip">BİRİNCİ ŞAHIS · SÜRÜKLEYEREK ETRAFA BAK</span>
-    </div>
-
-    <nav class="station-nav" aria-label="Dükkân istasyonları"></nav>
-
-    <section class="work-panel">
-      <div class="panel-grip"></div>
-      <div class="panel-title">
-        <div>
-          <div class="eyebrow" data-panel-kicker>TEZGÂH · BİRİNCİ ŞAHIS</div>
-          <strong data-panel-title>Tezgâhta bekliyorsun</strong>
-        </div>
-        <button class="small-icon inspect-phone" aria-label="Cihazı yakından incele" title="Yakın Plan İncele">⌕</button>
-      </div>
-      <p data-panel-copy>Dükkânın tezgâhında bekliyorsun. Her 30-40 saniyede bir kapıdan yeni bir müşteri ikinci el telefonunu satmaya gelecek.</p>
-
-      <div class="inspect-grid" data-inspect-grid hidden></div>
-
-      <div class="action-row" data-main-actions>
-        <button class="secondary-btn inspect-btn" disabled>CİHAZI İNCELE</button>
-        <button class="primary-btn diagnose-btn" disabled>PAZARLIĞA GEÇ <span>→</span></button>
-      </div>
-
-      <div class="diagnostic" hidden></div>
-    </section>
-
-    <!-- ÖZEL İNCELEME EKRANI & KUŞBAKIŞI TEZGÂH (HUD) -->
-    <section class="inspection-hud" hidden>
-      <div class="inspect-top-card">
-        <button class="secondary-btn exit-inspect-btn">← TEZGÂHA DÖN</button>
-        <div style="flex:1;">
-          <div class="eyebrow" data-inspect-brand>ELMA · AMASYA iELMA 14 PRO MAX</div>
-          <strong data-inspect-title>Cihaz Tezgâhta · Test Aletlerini Kullan</strong>
-          <span data-inspect-status>Prob'u şarj soketine tak, büyüteçle ekranı tara veya ekrana çift dokun.</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span data-dock-summary class="eyebrow" style="margin:0;font-size:11px;">0/4 KONTROL</span>
-          <button class="primary-btn to-bargain-btn">PAZARLIĞA GEÇ <span>→</span></button>
-        </div>
-      </div>
-
-      <div class="inspect-hints-bar">
-        <span class="hint-pill" data-hint="battery"><b>⚡ Test Kablosunu Bağla:</b> Batarya Test Cihazı</span>
-        <span class="hint-pill" data-hint="magnifier"><b>🔍 Büyüteci Gezdir:</b> Çatlak & Kırık Ara</span>
-        <span class="hint-pill" data-hint="screen"><b>👆👆 Çift Dokun:</b> Ekranı Aç/Kapat</span>
-        <span class="hint-pill" data-hint="camera"><b>📸 Kamera:</b> Uygulamayı Aç</span>
-      </div>
-
-      <div class="battery-live-overlay" hidden>
-        <strong>⚡ BATARYA ANALİZİ YAPILIYOR...</strong>
-        <span data-battery-val>%0</span>
-        <div class="battery-live-bar">
-          <div class="battery-live-fill"></div>
-        </div>
-        <small style="font: 11px monospace; color: #cbd5e1;">Şarj akımı ve pil sağlığı ölçülüyor</small>
-      </div>
-
-      <div class="camera-live-overlay good" hidden></div>
-    </section>
-
-    <aside class="toast" aria-live="polite"></aside>
-
-    <div class="modal-backdrop" hidden>
-      <section class="settings-card">
-        <button class="modal-close" aria-label="Kapat">×</button>
-        <div class="eyebrow">DÜKKÂN YÖNETİMİ & PERFORMANS</div>
-        <h2>Gün sonu & ayarlar</h2>
-        <p>Grafik kalitesini cihazına göre seçebilir veya kira/elektrik giderlerini ödeyip yeni güne geçebilirsin.</p>
-        <div class="eyebrow" style="margin-top:8px;">GRAFİK KALİTESİ (MAKS 1.5x PİKSEL)</div>
-        <div class="quality-row" data-quality-row>
-          <button class="quality-pill" data-q="low">DÜŞÜK</button>
-          <button class="quality-pill" data-q="medium">ORTA</button>
-          <button class="quality-pill" data-q="high">YÜKSEK</button>
-        </div>
-        <div class="expense-line">
-          <span>Ses Efektleri (İlk dokunuşla aktif)</span>
-          <button class="quiet-btn toggle-audio-btn" style="margin:0;">AÇIK</button>
-        </div>
-        <div class="expense-line">
-          <span>Günlük kira + elektrik gideri</span>
-          <b>−₺420</b>
-        </div>
-        <div class="action-row">
-          <button class="secondary-btn manual-save-btn">KAYDET</button>
-          <button class="primary-btn close-day">GÜNÜ KAPAT <span>→</span></button>
-        </div>
-      </section>
-    </div>
-
-    <!-- KONUŞMA BALONU (Speech Bubble) -->
-    <div class="speech-bubble-overlay" hidden>
-      <div class="speech-bubble">
-        <div class="bubble-header">
-          <div class="bubble-customer-info">
-            <span class="bubble-avatar" data-bubble-avatar>👤</span>
-            <div>
-              <strong data-bubble-name>Müşteri</strong>
-              <span class="bubble-intent-badge sell" data-bubble-intent>🏷️ SATIŞ</span>
-            </div>
-          </div>
-          <span class="bubble-voice-icon">🔊 8-BIT SES</span>
-        </div>
-        <div class="bubble-content" data-bubble-text>
-          ...
-        </div>
-        <div class="bubble-footer">
-          <span>👆 Kapatmak ve tezgâha geçmek için ekrana dokun</span>
-          <button class="bubble-dismiss-btn">DEVAM ET <span>→</span></button>
-        </div>
-      </div>
-    </div>`;
+  shell.innerHTML = SHELL_HTML;
 
   root.append(shell);
 
@@ -1639,6 +494,8 @@ function buildInterface(
 
   // Özel İnceleme Ekranı DOM öğeleri
   const inspectionHud = select<HTMLElement>(".inspection-hud");
+  const diagnosisPanel = select<HTMLElement>("[data-diagnosis-panel]");
+  const diagnosisOptionsRoot = select<HTMLElement>("[data-diagnosis-options]");
   const inspectBrandEl = select<HTMLElement>("[data-inspect-brand]");
   const inspectTitleEl = select<HTMLElement>("[data-inspect-title]");
   const inspectStatusEl = select<HTMLElement>("[data-inspect-status]");
@@ -1656,6 +513,7 @@ function buildInterface(
   const bubbleName = select<HTMLElement>("[data-bubble-name]");
   const bubbleIntent = select<HTMLElement>("[data-bubble-intent]");
   const bubbleText = select<HTMLElement>("[data-bubble-text]");
+  const bubbleFooterText = select<HTMLElement>("[data-bubble-footer-copy]");
 
   let toastTimer = 0;
 
@@ -1666,23 +524,24 @@ function buildInterface(
     toastTimer = window.setTimeout(() => toastEl.classList.remove("visible"), 2500);
   };
 
-  const openSpeechBubble = (text: string): void => {
+  const openSpeechBubble = (text: string, speaker: "customer" | "player" = "customer"): void => {
     isSpeechBubbleOpen = true;
     speechBubbleOverlay.hidden = false;
-    bubbleAvatar.textContent = encounter.customer.initials;
-    bubbleName.textContent = encounter.customer.name;
+    speechBubbleOverlay.classList.toggle("player-speech", speaker === "player");
+    bubbleAvatar.textContent = speaker === "player" ? "🧑‍🔧" : encounter.customer.initials;
+    bubbleName.textContent = speaker === "player" ? "Sen · Telefoncu" : encounter.customer.name;
+    const isRepairRequest = encounter.customer.intent === "repair";
+    bubbleAction = speaker === "player" ? "offer" : isRepairRequest ? "inspect" : "close";
+    bubbleFooterText.textContent = speaker === "player" ? "Teklifini müşteriye sun" : isRepairRequest ? "Şikâyeti kontrol etmek için telefonu incele" : "Kapatmak için devam et";
+    const dismissButton = speechBubbleOverlay.querySelector<HTMLButtonElement>(".bubble-dismiss-btn");
+    if (dismissButton) dismissButton.innerHTML = speaker === "player" ? "TEKLİFİ SUN <span>→</span>" : isRepairRequest ? "TELEFONU İNCELE <span>→</span>" : "DEVAM ET <span>→</span>";
 
     const intent = encounter.customer.intent;
-    bubbleIntent.className = `bubble-intent-badge ${intent}`;
-    bubbleIntent.textContent =
-      intent === "sell"
-        ? "🏷️ TELEFON SATIŞI"
-        : intent === "repair"
-          ? "🔧 TAMİR TALEBİ"
-          : "🛒 TELEFON ALIMI";
+    bubbleIntent.className = "bubble-intent-badge " + (speaker === "player" ? "repair" : intent);
+    bubbleIntent.textContent = speaker === "player" ? "🔎 USTA TESPİTİ" : intent === "sell" ? "🏷️ TELEFON SATIŞI" : intent === "repair" ? "🔧 TAMİR TALEBİ" : "🛒 TELEFON ALIMI";
 
     bubbleText.textContent = "";
-    audio.playCustomerSpeech();
+    if (speaker === "customer") audio.playCustomerSpeech(); else audio.playTap();
 
     if (typewriterTimer !== null) {
       clearInterval(typewriterTimer);
@@ -1718,7 +577,7 @@ function buildInterface(
     audio.playTap();
     wakeRender(800);
 
-    if (encounter.customer.intent === "buy" && stockItems.length === 0) {
+    if (encounter.customer.intent === "buy" && stockItems.length === 0 && !workshop.isWorkshopActive) {
       notify("Vitrinde satılık telefon olmadığı için müşteri ayrıldı.");
       window.setTimeout(() => {
         dismissCustomerAndStartWaiting();
@@ -1729,7 +588,24 @@ function buildInterface(
   speechBubbleOverlay.addEventListener("click", closeSpeechBubble);
   speechBubbleOverlay.querySelector(".bubble-dismiss-btn")?.addEventListener("click", (e) => {
     e.stopPropagation();
+    const action = bubbleAction;
     closeSpeechBubble();
+    if (action === "inspect") {
+      if (encounter.customer.intent === "buy") setStation("display");
+      else setStation("repair", false);
+    }
+    else if (action === "offer" && falseDiagnosisClaimed) {
+      openSpeechBubble("Hayır usta, telefonumun " + (diagnosisOptions.find((option) => !encounter.phone.defects.some((defect) => defect.category === option.id) && diagnosedCategories.has(option.id))?.label.toLowerCase() ?? "bu parçası") + " bozuk değil. Böyle bir işlem istemiyorum, vazgeçtim.", "customer");
+      bubbleAction = "reject";
+      const rejectButton = speechBubbleOverlay.querySelector<HTMLButtonElement>(".bubble-dismiss-btn");
+      if (rejectButton) rejectButton.innerHTML = "MÜŞTERİYİ UĞURLA <span>→</span>";
+      bubbleFooterText.textContent = "Müşteri yanlış arıza iddiasına itiraz ediyor";
+    } else if (action === "reject") {
+      store.addReputation(-1);
+      updateHUD(store.getState());
+      notify("Müşteri vazgeçti · İtibar −1");
+      dismissCustomerAndStartWaiting();
+    } else if (action === "offer") handleOfferSubmission();
   });
 
   const sync3DSceneToEncounter = (): void => {
@@ -1869,7 +745,7 @@ function buildInterface(
     const foundDefects = ph.defects.filter((d) => d.found);
 
     if (checkedCount === 0) {
-      inspectStatusEl.textContent = `Gizli kusurları bulmak için aşağıdaki test aletlerine dokun. Müşteri Sabrı: %${cust.patience}`;
+      inspectStatusEl.textContent = `Bataryayı test cihazıyla; ekranı ve kamerayı telefondan kontrol et. Müşteri Sabrı: %${cust.patience}`;
     } else if (foundDefects.length > 0) {
       inspectStatusEl.textContent = `⚠ ${foundDefects.length} Arıza Bulundu (−₺${foundDefects.reduce((s, d) => s + d.valueLoss, 0).toLocaleString("tr-TR")}) · Sabır: %${cust.patience}`;
     } else if (checkedCount === INSPECTION_CATEGORIES.length) {
@@ -1882,7 +758,6 @@ function buildInterface(
 
     // İnceleme ipuçları çubuğundaki (inspect-hints-bar) pill durumlarını güncelle
     const batteryHint = shell.querySelector<HTMLElement>("[data-hint='battery']");
-    const magHint = shell.querySelector<HTMLElement>("[data-hint='magnifier']");
     const screenHint = shell.querySelector<HTMLElement>("[data-hint='screen']");
     const cameraHint = shell.querySelector<HTMLElement>("[data-hint='camera']");
 
@@ -1902,23 +777,6 @@ function buildInterface(
     } else if (batteryHint) {
       batteryHint.className = "hint-pill";
       batteryHint.innerHTML = "<b>⚡ Test Kablosunu Bağla:</b> Batarya Test Cihazı";
-    }
-
-    // 2. Ekran durumu (Büyüteç ile inceleme)
-    if (ph.inspected["screen"]) {
-      const scrDef = ph.defects.find((d) => d.category === "screen");
-      if (magHint) {
-        if (scrDef) {
-          magHint.className = "hint-pill warn";
-          magHint.innerHTML = `<b>⚠ Ekran:</b> ${scrDef.title}`;
-        } else {
-          magHint.className = "hint-pill good";
-          magHint.innerHTML = "<b>✓ Ekran:</b> Kılcal Çatlak Yok, Cam Temiz";
-        }
-      }
-    } else if (magHint) {
-      magHint.className = "hint-pill";
-      magHint.innerHTML = "<b>🔍 Büyüteci Gezdir:</b> Ekranda Çatlak / Kırık Ara";
     }
 
     // 3. Kamera durumu
@@ -2086,6 +944,81 @@ function buildInterface(
     wakeRender(1200);
   };
 
+  const renderDiagnosisPanel = (): void => {
+    if (encounter.customer.intent !== "repair") {
+      diagnosisPanel.hidden = true;
+      return;
+    }
+    diagnosisPanel.hidden = false;
+    const phoneData = encounter.phone;
+    diagnosisOptionsRoot.innerHTML = diagnosisOptions.map((option) => {
+      const checked = phoneData.inspected[option.id];
+      const defect = phoneData.defects.find((item) => item.category === option.id);
+      const reportedByCustomer = encounter.customer.repairTargetDefect?.category === option.id;
+      const alreadyReported = diagnosedCategories.has(option.id);
+      const state = alreadyReported ? "MÜŞTERİYE BİLDİRİLDİ" : !checked ? (reportedByCustomer ? "ŞİKÂYETİ TEST ET" : "ÖNCE TEST ET") : defect ? "ARIZA BULUNDU" : "TEST TEMİZ";
+      return '<button type="button" class="diagnosis-option ' + (defect && checked ? "fault" : checked ? "clear" : "") + '" data-diagnosis="' + option.id + '" ' + (!checked || alreadyReported ? "disabled" : "") + '><span>' + option.label + '</span><small>' + state + '</small></button>';
+    }).join("") + '<button type="button" class="primary-btn inspection-finished-btn">İNCELEME BİTTİ <span>→</span></button>';
+  };
+
+  const reportDiagnosisToCustomer = (category: InspectionCategoryId): void => {
+    const { phone: ph, customer: cust } = encounter;
+    if (cust.intent !== "repair" || dealFinished || !ph.inspected[category] || diagnosedCategories.has(category)) return;
+    diagnosedCategories.add(category);
+    const categoryLabel = diagnosisOptions.find((option) => option.id === category)?.label ?? category;
+    const defect = ph.defects.find((item) => item.category === category);
+    let line: string;
+
+    if (!defect) {
+      falseDiagnosisClaimed = true;
+      currentOffer = roundTo50(currentOffer + 1000);
+      cust.currentAskPrice = roundTo50(cust.currentAskPrice + 1000);
+      cust.minAcceptPrice = roundTo50(cust.minAcceptPrice + 1000);
+      line = categoryLabel + " arızalı görünüyor. Bu ek onarım için teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
+      notify("Arıza müşteriye bildirildi · Teklife ₺1.000 eklendi.");
+    } else {
+      defect.found = true;
+      const requestedDefect = cust.repairTargetDefect;
+      const isAdditionalRepair = requestedDefect !== undefined && requestedDefect.id !== defect.id;
+      if (isAdditionalRepair) {
+        currentOffer = roundTo50(currentOffer + 1000);
+        cust.currentAskPrice = roundTo50(cust.currentAskPrice + 1000);
+        cust.minAcceptPrice = roundTo50(cust.minAcceptPrice + 1000);
+        const firstName = requestedDefect?.title ?? "İlk arıza";
+        line = firstName + " arızasına ek olarak " + defect.title + " da bozuk. Bu ek onarım için ücretimi ₺1.000 artırıyorum. Yeni teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
+        notify("Ek arıza doğru tespit edildi · Tamir teklifine ₺1.000 eklendi.");
+      } else {
+        line = defect.title + " arızasını doğruladım. Tamir teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
+        notify("Müşteri şikâyeti doğrulandı: " + defect.title + ".");
+      }
+      audio.playDefect();
+    }
+
+    updateHUD(store.getState());
+    updateInspectionHud();
+    renderDiagnosisPanel();
+    renderDiagnosticArea();
+    pendingPlayerOfferText = "Telefonu inceledim. " + line;
+    updateInspectionHud();
+    renderDiagnosisPanel();
+  };
+
+  diagnosisOptionsRoot.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement;
+    if (target.closest(".inspection-finished-btn")) {
+      audio.unlock();
+      audio.playTap();
+      setStation("counter");
+      renderDiagnosticArea();
+      notify("İnceleme tamamlandı · Teklif tutarını belirle.");
+      return;
+    }
+    const button = target.closest<HTMLButtonElement>("[data-diagnosis]");
+    const category = button?.dataset["diagnosis"] as InspectionCategoryId | undefined;
+    if (!category) return;
+
+    reportDiagnosisToCustomer(category);
+  });
   const renderInspectionGrid = (): void => {
     if (customerState !== "INTERACTING" || station === "display" || station === "stock" || dealFinished) {
       inspectGridEl.hidden = true;
@@ -2141,29 +1074,30 @@ function buildInterface(
     if (defect) {
       defect.found = true;
       audio.playDefect();
-      if (catId === "screen") {
-        phoneScreenMat.color.set("#162322");
+      if (catId === "screen") phoneScreenMat.color.set("#162322");
+      if (cust.intent === "repair") {
+        titleEl.textContent = catInfo.title + ": arıza tespit edildi";
+        copyEl.textContent = defect.title + " bulundu. Sağdaki listeden arızayı müşteriye bildir.";
+        notify("⚠ " + catInfo.title + ": " + defect.title + " bulundu. Tespiti sağ panelden bildir.");
+      } else {
+        const discount = roundTo50(defect.valueLoss * cust.personality.defectConcession);
+        cust.minAcceptPrice = Math.max(400, cust.minAcceptPrice - discount);
+        cust.currentAskPrice = Math.max(cust.minAcceptPrice, cust.currentAskPrice - roundTo50(discount * 0.85));
+        cust.lastResponse = catInfo.title + " arızasını (" + defect.title + ") kabul ediyorum; fiyatı ₺" + cust.currentAskPrice.toLocaleString("tr-TR") + " yaptım.";
+        titleEl.textContent = catInfo.title + ": Gizli arıza tespit edildi!";
+        copyEl.textContent = defect.title + " (−₺" + defect.valueLoss.toLocaleString("tr-TR") + "). Müşteri fiyatı ₺" + cust.currentAskPrice.toLocaleString("tr-TR") + " seviyesine çekti.";
+        notify("⚠ " + catInfo.title + ": " + defect.title + " bulundu!");
       }
-      const discount = roundTo50(defect.valueLoss * cust.personality.defectConcession);
-      cust.minAcceptPrice = Math.max(400, cust.minAcceptPrice - discount);
-      cust.currentAskPrice = Math.max(
-        cust.minAcceptPrice,
-        cust.currentAskPrice - roundTo50(discount * 0.85),
-      );
-      cust.lastResponse = `${catInfo.title} arızasını (${defect.title}) kabul ediyorum; fiyatı ₺${cust.currentAskPrice.toLocaleString("tr-TR")} yaptım.`;
-      titleEl.textContent = `${catInfo.title}: Gizli arıza tespit edildi!`;
-      copyEl.textContent = `${defect.title} (−₺${defect.valueLoss.toLocaleString("tr-TR")}). Müşteri fiyatı ₺${cust.currentAskPrice.toLocaleString("tr-TR")} seviyesine çekti.`;
-      notify(`⚠ ${catInfo.title}: ${defect.title} bulundu!`);
     } else {
       audio.playClean();
-      cust.lastResponse = `Gördüğün gibi ${catInfo.title.toLowerCase()} tarafı saat gibi çalışıyor.`;
-      titleEl.textContent = `${catInfo.title} kontrolü temiz çıktı`;
-      copyEl.textContent = `${ph.model} · ${catInfo.title} testinde kusur görülmedi.`;
-      notify(`✓ ${catInfo.title} sorunsuz.`);
+      cust.lastResponse = "Gördüğün gibi " + catInfo.title.toLowerCase() + " tarafı saat gibi çalışıyor.";
+      titleEl.textContent = catInfo.title + " kontrolü temiz çıktı";
+      copyEl.textContent = ph.model + " · " + catInfo.title + " testinde kusur görülmedi.";
+      notify("✓ " + catInfo.title + " sorunsuz.");
     }
 
-    currentOffer = roundTo50(getKnownPhoneValue(ph) * 0.85);
-
+    if (cust.intent !== "repair") currentOffer = roundTo50(getKnownPhoneValue(ph) * 0.85);
+    renderDiagnosisPanel();
     if (cust.patience <= 0) {
       audio.playFail();
       dealFinished = true;
@@ -2337,6 +1271,17 @@ function buildInterface(
       return;
     }
 
+    if (repairAgreed) {
+      mainActionsEl.hidden = true;
+      diagnosticEl.hidden = false;
+      const defectTitle = encounter.customer.repairTargetDefect?.title || "Donanım Onarımı";
+      diagnosticEl.innerHTML = workshopRepaired
+        ? '<div class="result-row"><span>ATÖLYE TAMİRİ TAMAMLANDI</span><b class="good">' + defectTitle + '</b></div><div class="quote-row"><span>₺' + currentOffer.toLocaleString("tr-TR") + ' tutarındaki anlaşma hazır. Telefonu müşteriye teslim et.</span></div><div class="action-row"><button class="primary-btn repair-delivery-btn">TAMİR EDİLDİ · MÜŞTERİYE TESLİM ET <span>→</span></button></div>'
+        : '<div class="result-row"><span>TAMİR ANLAŞMASI SAĞLANDI</span><b class="warn">ATÖLYE BEKLİYOR</b></div><div class="quote-row"><span>' + defectTitle + ' için ₺' + currentOffer.toLocaleString("tr-TR") + ' üzerinde anlaşıldı. Önce atölyede tamir et.</span></div><div class="action-row"><button class="primary-btn repair-workshop-btn">ATÖLYEYE GİT <span>→</span></button></div>';
+      diagnosticEl.querySelector(".repair-workshop-btn")?.addEventListener("click", () => workshop.enter());
+      diagnosticEl.querySelector(".repair-delivery-btn")?.addEventListener("click", () => handleOfferSubmission());
+      return;
+    }
     // Aktif Pazarlık / Teklif Alanı
     mainActionsEl.hidden = true;
     diagnosticEl.hidden = false;
@@ -2536,14 +1481,52 @@ function buildInterface(
 
     diagnosticEl.querySelector(".offer-btn")?.addEventListener("click", () => {
       audio.unlock();
-      handleOfferSubmission();
+      const offerText = pendingPlayerOfferText || "Telefonu inceledim. Teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
+      pendingPlayerOfferText = "";
+      openSpeechBubble(offerText + " Kabul ediyor musunuz?", "player");
     });
   };
 
+  const finishRepairTransaction = (): void => {
+    const { phone: ph, customer: cust } = encounter;
+    const partCost = cust.repairPartCost || 350;
+    audio.playCash();
+    const netProfit = currentOffer - partCost;
+    store.addMoney(netProfit);
+    store.addReputation(3);
+    lastTransactionSummary = {
+      intent: "repair",
+      phoneModel: ph.brand + " " + ph.model,
+      boughtPrice: currentOffer,
+      actualValue: currentOffer,
+      netProfit,
+      repDelta: 3,
+      foundDefects: [],
+      missedDefects: [],
+      stockUid: ph.uid,
+      sold: true,
+      repairTitle: cust.repairTargetDefect?.title || "Donanım Onarımı",
+      repairPartCost: partCost,
+    };
+    dealFinished = true;
+    customersServedToday += 1;
+    titleEl.textContent = "Tamir teslim edildi · Müşteri memnun";
+    copyEl.textContent = (cust.repairTargetDefect?.title || "Arıza") + " atölyede onarıldı. ₺" + currentOffer.toLocaleString("tr-TR") + " tahsil edildi. Net kâr: +₺" + netProfit.toLocaleString("tr-TR") + ".";
+    sync3DSceneToEncounter();
+    updateCustomerHeader();
+    updateHUD(store.getState());
+    renderInspectionGrid();
+    renderDiagnosticArea();
+  };
   const handleOfferSubmission = (): void => {
     const { phone: ph, customer: cust } = encounter;
 
     if (cust.intent === "repair") {
+      if (repairAgreed) {
+        if (workshopRepaired) finishRepairTransaction();
+        else workshop.enter();
+        return;
+      }
       const partCost = cust.repairPartCost || 350;
       if (store.getState().money < partCost) {
         audio.playFail();
@@ -2555,36 +1538,15 @@ function buildInterface(
       timeMinutes = Math.min(19 * 60, timeMinutes + 10);
 
       if (currentOffer <= cust.minAcceptPrice) {
-        audio.playCash();
-        const netProfit = currentOffer - partCost;
-        store.addMoney(netProfit);
-        store.addReputation(3);
-
-        lastTransactionSummary = {
-          intent: "repair",
-          phoneModel: `${ph.brand} ${ph.model}`,
-          boughtPrice: currentOffer,
-          actualValue: currentOffer,
-          netProfit,
-          repDelta: 3,
-          foundDefects: [],
-          missedDefects: [],
-          stockUid: ph.uid,
-          sold: true,
-          repairTitle: cust.repairTargetDefect?.title || "Donanım Onarımı",
-          repairPartCost: partCost,
-        };
-
-        dealFinished = true;
-        customersServedToday += 1;
-        titleEl.textContent = "Tamir tamamlandı · Müşteri memnun";
-        copyEl.textContent = `${cust.repairTargetDefect?.title || "Arıza"} başarıyla onarıldı. ₺${currentOffer.toLocaleString("tr-TR")} tahsil edildi. Net kâr: +₺${netProfit.toLocaleString("tr-TR")}.`;
-
-        sync3DSceneToEncounter();
+        repairAgreed = true;
+        cust.lastResponse = "Tamir fiyatında anlaştık usta. Şimdi atölyede cihazı onaracağım.";
+        audio.playTap();
+        titleEl.textContent = "Tamir anlaşması sağlandı";
+        copyEl.textContent = "Müşterinin telefonunu tamir atölyesine götür. İş bitince tezgâha dönüp teslim et.";
+        notify("Tamir fiyatı kabul edildi. Önce atölyede onarım yap.");
         updateCustomerHeader();
-        updateHUD(store.getState());
-        renderInspectionGrid();
         renderDiagnosticArea();
+        workshop.enter();
         return;
       }
 
@@ -2854,7 +1816,7 @@ function buildInterface(
       repair: {
         eye: "CİHAZI İNCELE · 90° KUŞBAKIŞI TEZGÂH",
         heading: `${encounter.phone.brand} ${encounter.phone.model} (${encounter.phone.storage})`,
-        body: "Tezgâhtaki aletleri kullan: Çift dokunarak aç, batarya test kablosunu telefonun yan şarj girişine bağla (3 sn analiz), büyüteçle çizik ara, kamera uygulamasından zemini test et.",
+        body: "Tezgâhtaki aletleri kullan: Çift dokunarak aç, batarya test kablosunu telefonun yan şarj girişine bağla (3 sn analiz), kamera uygulamasını açarak sensörü test et.",
         position: [0, 1.95, 0.2201],
         look: [0, 1.266, 0.22],
       },
@@ -2952,6 +1914,11 @@ function buildInterface(
           ? roundTo50(encounter.customer.initialAskPrice * 0.95)
           : (encounter.customer.buyerBudget ?? 10000);
     dealFinished = false;
+    repairAgreed = false;
+    workshopRepaired = false;
+    diagnosedCategories.clear();
+    pendingPlayerOfferText = "";
+    falseDiagnosisClaimed = false;
     lastTransactionSummary = null;
     phonePlacedSoundPlayed = false;
     isScreenPoweredOn = false;
@@ -2965,8 +1932,6 @@ function buildInterface(
     cablePlugGroup.position.copy(chargerDockPos);
     cablePlugGroup.rotation.set(0, 0, 0);
     updateCableMesh(false);
-    magnifierGroup.position.copy(magnifierDockPos);
-    magnifierGroup.rotation.set(0, 0.1, 0);
     updateBatteryLcd("idle");
 
     customerState = "WALKING_IN";
@@ -2982,6 +1947,13 @@ function buildInterface(
     updateCustomerHeader();
     updateHUD(store.getState());
     setStation("counter");
+    if (workshop.isWorkshopActive) {
+      openSpeechBubble("Müşteri geldi, tezgâhta bekliyor. Atölyedeki işini bitirince Müşteri Tezgâhı sekmesine dönebilirsin.", "customer");
+      bubbleAction = "close";
+      const acknowledgeButton = speechBubbleOverlay.querySelector<HTMLButtonElement>(".bubble-dismiss-btn");
+      if (acknowledgeButton) acknowledgeButton.innerHTML = "ANLADIM <span>→</span>";
+      bubbleFooterText.textContent = "Müşteri tezgâhta seni bekliyor";
+    }
   };
 
   const dismissCustomerAndStartWaiting = (): void => {
@@ -2994,6 +1966,11 @@ function buildInterface(
 
     customerWaitTimer = rng.nextInt(30, 40);
     dealFinished = false;
+    repairAgreed = false;
+    workshopRepaired = false;
+    diagnosedCategories.clear();
+    pendingPlayerOfferText = "";
+    falseDiagnosisClaimed = false;
     lastTransactionSummary = null;
     if (batteryTestInterval !== null) {
       clearInterval(batteryTestInterval);
@@ -3003,8 +1980,6 @@ function buildInterface(
     cablePlugGroup.position.copy(chargerDockPos);
     cablePlugGroup.rotation.set(0, 0, 0);
     updateCableMesh(false);
-    magnifierGroup.position.copy(magnifierDockPos);
-    magnifierGroup.rotation.set(0, 0.1, 0);
     isChargerPlugged = false;
     isScreenPoweredOn = false;
     inCameraApp = false;
@@ -3149,6 +2124,7 @@ function buildInterface(
   const canvas = document.querySelector<HTMLCanvasElement>("#game-root canvas");
 
   const onPointerDown = (event: PointerEvent): void => {
+    if (workshop.isWorkshopActive) return;
     audio.unlock();
     isPointerDown = true;
     totalDragDist = 0;
@@ -3169,13 +2145,6 @@ function buildInterface(
         wakeRender(1000);
         return;
       }
-      const magHits = raycaster.intersectObject(magnifierGroup, true);
-      if (magHits.length > 0) {
-        activeToolDragging = "magnifier";
-        audio.playTap();
-        wakeRender(1000);
-        return;
-      }
       isDraggingPhone = false;
       return;
     }
@@ -3186,7 +2155,7 @@ function buildInterface(
   };
 
   const onPointerMove = (event: PointerEvent): void => {
-    if (!isPointerDown) return;
+    if (workshop.isWorkshopActive || !isPointerDown) return;
     const dx = event.clientX - lastX;
     const dy = event.clientY - lastY;
     lastX = event.clientX;
@@ -3206,32 +2175,8 @@ function buildInterface(
             cablePlugGroup.position.x = Math.max(-0.35, Math.min(0.35, intersect.x));
             cablePlugGroup.position.z = Math.max(-0.05, Math.min(0.50, intersect.z));
             updateCableMesh(false);
-            wakeRender(400);
-          } else if (activeToolDragging === "magnifier") {
-            magnifierGroup.position.x = Math.max(-0.35, Math.min(0.35, intersect.x));
-            magnifierGroup.position.y = 1.30;
-            magnifierGroup.position.z = Math.max(-0.05, Math.min(0.50, intersect.z));
-            if (
-              Math.abs(magnifierGroup.position.x) < 0.12 &&
-              Math.abs(magnifierGroup.position.z - 0.22) < 0.20
-            ) {
-              const scrDef = encounter.phone.defects.find((d) => d.category === "screen");
-              if (scrDef && !scrDef.found) {
-                scrDef.found = true;
-                runCategoryInspection("screen");
-                audio.playScan();
-                notify(`🔍 Büyüteç ile ekranda tespit edildi: ${scrDef.title}`);
-                updateInspectionHud();
-              } else if (!encounter.phone.inspected["screen"]) {
-                runCategoryInspection("screen");
-                audio.playClean();
-                notify("🔍 Büyüteç ile incelendi: Ekran camı temiz, çatlak yok.");
-                updateInspectionHud();
-              }
-            }
-            wakeRender(400);
-          }
-        }
+            wakeRender(400);        }
+      }
       }
       return;
     }
@@ -3246,7 +2191,7 @@ function buildInterface(
   };
 
   const onPointerUp = (event: PointerEvent): void => {
-    if (!isPointerDown) return;
+    if (workshop.isWorkshopActive || !isPointerDown) return;
     isPointerDown = false;
 
     if (isInspecting) {
@@ -3271,11 +2216,6 @@ function buildInterface(
             }
             batteryLiveOverlay.hidden = true;
             updateBatteryLcd("idle");
-          }
-        } else if (activeToolDragging === "magnifier") {
-          if (magnifierGroup.position.distanceTo(magnifierDockPos) < 0.14) {
-            magnifierGroup.position.copy(magnifierDockPos);
-            magnifierGroup.rotation.set(0, 0.1, 0);
           }
         }
         activeToolDragging = "none";
@@ -3386,14 +2326,7 @@ function buildInterface(
           }
           wakeRender(800);
           return;
-        }
-        const magHits = raycaster.intersectObject(magnifierGroup, true);
-        if (magHits.length > 0) {
-          audio.playTap();
-          notify("🔍 Büyüteci basılı tutup telefonun üzerinde gezdirerek çatlakları ara.");
-          return;
-        }
-      }
+        }      }
       return;
     }
 
@@ -3472,7 +2405,7 @@ function buildInterface(
             updateCustomerHeader();
             updateHUD(store.getState());
             notify(`🗣️ ${encounter.customer.name}: "${encounter.customer.speechText}"`);
-            openSpeechBubble(encounter.customer.speechText);
+            if (!workshop.isWorkshopActive) openSpeechBubble(encounter.customer.speechText);
           } else {
             customerState = "PLACING_PHONE";
             placingTimer = 0;
@@ -3534,7 +2467,7 @@ function buildInterface(
               ? "Cihaz tezgâha bırakıldı. 'ARIZAYI İNCELE' butonuna dokunarak test aletlerini kullan."
               : "Cihaz tezgâha bırakıldı. 'CİHAZI İNCELE' butonuna dokunarak test aletlerini kullan."
           );
-          openSpeechBubble(encounter.customer.speechText);
+          if (!workshop.isWorkshopActive) openSpeechBubble(encounter.customer.speechText);
         }
       } else if (customerState === "WALKING_OUT") {
         walkAnimCycle += deltaSeconds * 7.5;
@@ -3565,6 +2498,27 @@ function buildInterface(
     },
     isUserDraggingPhone: () => isDraggingPhone,
     isInspecting: () => isInspecting,
+    getWorkshopRepairJob: () => {
+      if (customerState !== "INTERACTING" || encounter.customer.intent !== "repair" || dealFinished || !repairAgreed) return null;
+      const phoneData = encounter.phone;
+      const targetId = encounter.customer.repairTargetDefect?.id;
+      const defect = phoneData.defects.find((item) => item.id === targetId)
+        ?? phoneData.defects.find((item) => diagnosedCategories.has(item.category));
+      if (!defect) return null;
+      return { uid: phoneData.uid, modelKey: phoneData.brand + "|" + phoneData.model, modelLabel: phoneData.brand + " " + phoneData.model, defectId: defect.id, defectCategory: defect.category, defectTitle: defect.title };
+    },
+    completeWorkshopRepair: (job: WorkshopRepairJob) => {
+      const defectIndex = encounter.phone.defects.findIndex((item) => item.id === job.defectId);
+      if (defectIndex >= 0) encounter.phone.defects.splice(defectIndex, 1);
+      const targetId = encounter.customer.repairTargetDefect?.id;
+      const remainingDiagnosedDefect = encounter.phone.defects.some((item) => item.id === targetId || diagnosedCategories.has(item.category));
+      workshopRepaired = !remainingDiagnosedDefect;
+      sync3DSceneToEncounter();
+      updateCustomerHeader();
+      updateHUD(store.getState());
+      renderDiagnosticArea();
+      notify(workshopRepaired ? "🔧 Tamir tamamlandı. Tezgâha dönüp telefonu müşteriye teslim et." : "🔧 Bu arıza onarıldı. Tezgâha dönüp sıradaki tespiti atölyede tamir et.");
+    },    returnToCounter: () => setStation("counter"),
     destroy: () => {
       if (batteryTestInterval !== null) {
         clearInterval(batteryTestInterval);
@@ -3593,3 +2547,39 @@ void bootstrap().catch((error: unknown) => {
   const root = document.querySelector<HTMLElement>("#ui-root");
   if (root) showError(root, "Oyun başlatılamadı. Geliştirici konsolundaki hata ayrıntılarına bakın.");
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

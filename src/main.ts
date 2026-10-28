@@ -490,6 +490,59 @@ function buildInterface(
   const qualityRowEl = select<HTMLElement>("[data-quality-row]");
   const toggleAudioBtn = select<HTMLButtonElement>(".toggle-audio-btn");
 
+  // Üst sol menü: stoktaki telefonları listeler
+  const stockMenuBtn = select<HTMLButtonElement>("[data-stock-menu-btn]");
+  const stockMenuPanel = select<HTMLElement>("[data-stock-menu]");
+  const stockMenuList = select<HTMLElement>("[data-stock-list]");
+  const stockMenuSummary = select<HTMLElement>("[data-stock-summary]");
+  const stockMenuCount = select<HTMLElement>("[data-stock-count]");
+  const formatLira = (value: number): string => `₺${Math.round(value).toLocaleString("tr-TR")}`;
+
+  const renderStockMenu = (): void => {
+    stockMenuCount.textContent = String(stockItems.length);
+    stockMenuCount.hidden = stockItems.length === 0;
+    if (stockMenuPanel.hidden) return;
+    const totalCost = stockItems.reduce((sum, item) => sum + item.boughtPrice, 0);
+    const totalKnown = stockItems.reduce((sum, item) => sum + getKnownStockValue(item), 0);
+    stockMenuSummary.innerHTML = `<span>${stockItems.length} CİHAZ</span><span>MALİYET ${formatLira(totalCost)}</span><span>TAHMİNİ DEĞER ${formatLira(totalKnown)}</span>`;
+    stockMenuList.innerHTML =
+      stockItems.length === 0
+        ? `<p class="stock-menu-empty">Stokta telefon yok. Müşteriden telefon aldığında burada görünür.</p>`
+        : stockItems
+            .map((item) => {
+              const known = getKnownStockValue(item);
+              const profit = known - item.boughtPrice;
+              const defects = item.foundDefects.length > 0
+                ? item.foundDefects.map((d) => `<i>${d.title}</i>`).join("")
+                : `<i class="clean">Bilinen arıza yok</i>`;
+              return `<article class="stock-menu-item"><div class="stock-menu-model"><strong>${item.brand} ${item.model}</strong><small>${item.ageYears} yaşında · Gün ${item.dayBought}</small></div><div class="stock-menu-prices"><span>Alış ${formatLira(item.boughtPrice)}</span><b class="${profit >= 0 ? "good" : "bad"}">Değer ${formatLira(known)}</b></div><div class="stock-menu-defects">${defects}</div></article>`;
+            })
+            .join("");
+  };
+
+  const setStockMenuOpen = (open: boolean): void => {
+    stockMenuPanel.hidden = !open;
+    stockMenuBtn.setAttribute("aria-expanded", String(open));
+    if (open) {
+      audio.unlock();
+      audio.playTap();
+      renderStockMenu();
+    }
+    wakeRender(400);
+  };
+  stockMenuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setStockMenuOpen(Boolean(stockMenuPanel.hidden));
+  });
+  shell.querySelector("[data-stock-menu-close]")?.addEventListener("click", () => setStockMenuOpen(false));
+  const onStockMenuOutsidePress = (event: PointerEvent): void => {
+    if (stockMenuPanel.hidden) return;
+    const target = event.target;
+    if (target instanceof Node && (stockMenuPanel.contains(target) || stockMenuBtn.contains(target))) return;
+    setStockMenuOpen(false);
+  };
+  window.addEventListener("pointerdown", onStockMenuOutsidePress);
+
   const customerCardEl = select<HTMLElement>(".customer-card");
   const workPanelEl = select<HTMLElement>(".work-panel");
 
@@ -654,6 +707,7 @@ function buildInterface(
     moneyEl.textContent = `₺${Math.floor(state.money).toLocaleString("tr-TR")}`;
     repEl.textContent = `${Math.round(state.reputation)} / 100`;
     dayEl.textContent = `G${String(state.day).padStart(2, "0")} · ${formatTime(timeMinutes)}`;
+    renderStockMenu();
 
     const quota = getDailyCustomerQuota(state.reputation);
     if (customerState === "WAITING") {
@@ -2540,6 +2594,7 @@ function buildInterface(
       window.removeEventListener("pointerup", onPointerUp);
       window.removeEventListener("pointercancel", onPointerUp);
       window.clearTimeout(toastTimer);
+      window.removeEventListener("pointerdown", onStockMenuOutsidePress);
     },
   };
 }

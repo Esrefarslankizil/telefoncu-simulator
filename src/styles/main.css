@@ -829,7 +829,6 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
 }
 .brand small { display: none; }
 .stats { gap: 0; }
-.stats > div:first-child,
 .stats > div:last-child,
 .fullscreen-toggle { display: none !important; }
 .stats > div:nth-child(2) {
@@ -954,4 +953,91 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
   }
   .diagnosis-option { padding: 8px; }
   .diagnosis-option span { font-size: 10px; }
+}
+
+
+/* ══════════════ ÜST SOL MENÜ (STOKTAKİ TELEFONLAR) · SAĞ ÜST TOPLAM BAKİYE ══════════════ */
+.brand { position: relative; pointer-events: auto; }
+.stock-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid #f3e9d52a;
+  border-radius: 11px;
+  background: #172521e8;
+  color: var(--cream);
+  font: 800 11px var(--mono);
+  letter-spacing: .14em;
+  cursor: pointer;
+  box-shadow: 0 8px 20px #0003;
+  backdrop-filter: blur(12px);
+}
+.stock-menu-btn[aria-expanded="true"] { border-color: var(--gold); background: #225d50; }
+.stock-menu-icon { font-size: 18px; line-height: 1; color: var(--gold); }
+.stock-menu-btn em {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--gold);
+  color: #1e2925;
+  font: 800 10px var(--mono);
+  font-style: normal;
+  text-align: center;
+}
+.stock-menu-btn em[hidden] { display: none; }
+
+.stock-menu-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  z-index: 40;
+  width: min(390px, calc(100vw - 32px));
+  max-height: min(68vh, 560px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e5b76566;
+  border-radius: 16px;
+  background: #14231ff2;
+  box-shadow: 0 18px 48px #0007;
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+.stock-menu-panel[hidden] { display: none; }
+.stock-menu-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.stock-menu-head small { display: block; color: var(--gold); font: 800 9px var(--mono); letter-spacing: .16em; }
+.stock-menu-head strong { display: block; margin-top: 3px; font-size: 16px; color: #fff6e6; }
+.stock-menu-close { width: 32px; height: 32px; border: 1px solid #f3e9d52a; border-radius: 9px; background: #ffffff0d; color: var(--cream); cursor: pointer; }
+.stock-menu-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.stock-menu-summary span { padding: 5px 9px; border-radius: 8px; background: #ffffff0f; color: #dad1bf; font: 700 9px var(--mono); letter-spacing: .06em; }
+.stock-menu-list { display: grid; gap: 8px; overflow-y: auto; padding-right: 2px; }
+.stock-menu-item { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; padding: 10px 11px; border: 1px solid #f3e9d51c; border-radius: 11px; background: #ffffff08; }
+.stock-menu-model strong { display: block; font-size: 13px; color: #fff6e6; }
+.stock-menu-model small { color: #b9b7a8; font: 9px var(--mono); }
+.stock-menu-prices { display: grid; text-align: right; gap: 2px; font: 700 10px var(--mono); color: #cfcbb9; }
+.stock-menu-prices b.good { color: #7ee0a8; }
+.stock-menu-prices b.bad { color: #ff9b8a; }
+.stock-menu-defects { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 5px; }
+.stock-menu-defects i { padding: 3px 7px; border-radius: 6px; background: #f59e0b24; color: #fbbf24; font: 600 9px var(--mono); font-style: normal; }
+.stock-menu-defects i.clean { background: #10b9811f; color: #6ee7b7; }
+.stock-menu-empty { margin: 4px 0; color: #c4c5b7; font-size: 12px; line-height: 1.5; }
+
+/* Toplam bakiye (sağ üst) her zaman görünür */
+.stats > div:first-child {
+  min-width: 132px;
+  border-color: #e5b76566;
+  background: #172521ea;
+}
+.stats > div:first-child small { color: #e5b765cc; }
+.stats > div:first-child b { font-size: 17px; color: var(--gold); }
+
+@media (max-width: 700px) {
+  .stock-menu-label { display: none; }
+  .stock-menu-btn { padding: 0 11px; }
+  .stats > div:first-child { min-width: 96px; }
+  .stats > div:first-child b { font-size: 13px; }
+  .stock-menu-panel { position: fixed; top: max(58px, calc(env(safe-area-inset-top) + 48px)); left: 10px; right: 10px; width: auto; }
 }

@@ -2,10 +2,15 @@
 export const SHELL_HTML = `<header class="topbar">
       <div class="brand">
 
-        <div><b>CEP DÜKKÂNI</b><small>BİRİNCİ ŞAHIS · TEZGÂHTASIN</small></div>
+        <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Stoktaki telefonları gör"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
+        <section class="stock-menu-panel" data-stock-menu role="dialog" aria-label="Stoktaki telefonlar" hidden>
+          <header class="stock-menu-head"><div><small>MENÜ</small><strong>Stoktaki Telefonlar</strong></div><button class="stock-menu-close" data-stock-menu-close type="button" aria-label="Kapat">✕</button></header>
+          <div class="stock-menu-summary" data-stock-summary></div>
+          <div class="stock-menu-list" data-stock-list></div>
+        </section>
       </div>
       <div class="stats">
-        <div><small>KASA</small><b data-money></b></div>
+        <div><small>TOPLAM BAKİYE</small><b data-money></b></div>
         <div><small>İTİBAR</small><b data-rep></b></div>
         <div><small>GÜN · SAAT</small><b data-day></b></div>
       </div>

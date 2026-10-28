@@ -49,6 +49,7 @@ import { mats, geometries } from "./scene/resources";
 import { buildShopScene } from "./scene/ShopScene";
 import { renderSmartphoneScreen } from "./scene/textures/smartphoneScreen";
 import { SHELL_HTML } from "./ui/shellTemplate";
+import { getBuyerAcceptChance, getKnownStockValue, getSuggestedBuyerPrice } from "./data/BuyerLogic";
 
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLElement>("#app");
@@ -530,9 +531,9 @@ function buildInterface(
     speechBubbleOverlay.classList.toggle("player-speech", speaker === "player");
     bubbleAvatar.textContent = speaker === "player" ? "🧑‍🔧" : encounter.customer.initials;
     bubbleName.textContent = speaker === "player" ? "Sen · Telefoncu" : encounter.customer.name;
-    const isRepairRequest = encounter.customer.intent === "repair";
+    const isRepairRequest = speaker === "customer" && (encounter.customer.intent === "repair" || encounter.customer.intent === "sell");
     bubbleAction = speaker === "player" ? "offer" : isRepairRequest ? "inspect" : "close";
-    bubbleFooterText.textContent = speaker === "player" ? "Teklifini müşteriye sun" : isRepairRequest ? "Şikâyeti kontrol etmek için telefonu incele" : "Kapatmak için devam et";
+    bubbleFooterText.textContent = speaker === "player" ? "Teklifini müşteriye sun" : isRepairRequest ? (encounter.customer.intent === "repair" ? "Şikâyeti kontrol etmek için telefonu incele" : "Değerini belirlemek için telefonu incele") : "Kapatmak için devam et";
     const dismissButton = speechBubbleOverlay.querySelector<HTMLButtonElement>(".bubble-dismiss-btn");
     if (dismissButton) dismissButton.innerHTML = speaker === "player" ? "TEKLİFİ SUN <span>→</span>" : isRepairRequest ? "TELEFONU İNCELE <span>→</span>" : "DEVAM ET <span>→</span>";
 
@@ -585,7 +586,11 @@ function buildInterface(
     }
   };
 
-  speechBubbleOverlay.addEventListener("click", closeSpeechBubble);
+  speechBubbleOverlay.addEventListener("click", () => {
+    // Satış / tamir müşterisinde balonun neresine tıklanırsa tıklansın telefon incelemeye alınır.
+    if (bubbleAction === "inspect") speechBubbleOverlay.querySelector<HTMLButtonElement>(".bubble-dismiss-btn")?.click();
+    else closeSpeechBubble();
+  });
   speechBubbleOverlay.querySelector(".bubble-dismiss-btn")?.addEventListener("click", (e) => {
     e.stopPropagation();
     const action = bubbleAction;
@@ -710,7 +715,7 @@ function buildInterface(
     customerEyebrow.textContent = `${intentLabel} · ${cust.personality.label} MÜŞTERİ · SABIR %${cust.patience} · TUR ${cust.bargainRound}/${cust.maxBargainRounds}`;
     customerName.textContent =
       cust.intent === "buy"
-        ? `${cust.name} · Bütçe: ₺${cust.buyerBudget?.toLocaleString("tr-TR")}`
+        ? `${cust.name} · Telefon Arıyor`
         : `${cust.name} · ${ph.brand} ${ph.model} (${ph.storage})`;
     customerRequest.textContent =
       cust.intent === "buy"
@@ -1346,7 +1351,7 @@ function buildInterface(
       const estProfit = currentOffer - selItem.boughtPrice;
       const pSign = estProfit >= 0 ? "+" : "";
       const pClass = estProfit >= 0 ? "good" : "bad";
-      const buyerBudget = cust.buyerBudget ?? 10000;
+      const selKnownValue = getKnownStockValue(selItem);
 
       const stockChipsHtml = stockItems
         .map((item, idx) => {
@@ -1360,7 +1365,7 @@ function buildInterface(
 
       diagnosticEl.innerHTML = `
         <div class="result-row">
-          <span>ARANAN: ${cust.buyerTargetBrand ?? "Herhangi"} · MÜŞTERİ BÜTÇESİ: ₺${buyerBudget.toLocaleString("tr-TR")}</span>
+          <span>ARANAN: ${cust.buyerTargetBrand ?? "Herhangi"} · BİLDİĞİN DEĞER: ₺${selKnownValue.toLocaleString("tr-TR")}</span>
           <b class="good">${remRounds} TUR HAKKIN VAR</b>
         </div>
         <div style="display:flex;gap:8px;overflow-x:auto;padding:6px 2px;">
@@ -1376,7 +1381,7 @@ function buildInterface(
           <div class="offer-box">₺${currentOffer.toLocaleString("tr-TR")}</div>
           <button class="step-btn" data-step="200">+200</button>
           <button class="step-btn" data-step="500">+500</button>
-          <button class="step-btn" data-match="budget">BÜTÇE</button>
+          <button class="step-btn" data-match="value">EDERİ</button>
         </div>
         <div class="action-row">
           <button class="secondary-btn decline-btn">CİHAZ YOK DE</button>
@@ -1389,15 +1394,15 @@ function buildInterface(
           audio.playTap();
           selectedStockIdx = Number(btn.dataset["stockIdx"]);
           const sItem = stockItems[selectedStockIdx]!;
-          currentOffer = Math.min(buyerBudget, Math.max(sItem.boughtPrice + 300, sItem.actualValue));
+          currentOffer = getSuggestedBuyerPrice(sItem);
           renderDiagnosticArea();
         });
       });
 
-      diagnosticEl.querySelector("[data-match='budget']")?.addEventListener("click", () => {
+      diagnosticEl.querySelector("[data-match='value']")?.addEventListener("click", () => {
         audio.unlock();
         audio.playTap();
-        currentOffer = buyerBudget;
+        currentOffer = selKnownValue;
         renderDiagnosticArea();
       });
     } else {
@@ -1592,12 +1597,15 @@ function buildInterface(
       if (stockItems.length === 0) return;
       selectedStockIdx = Math.max(0, Math.min(selectedStockIdx, stockItems.length - 1));
       const selItem = stockItems[selectedStockIdx]!;
-      const buyerBudget = cust.buyerBudget ?? cust.minAcceptPrice;
+      // Alıcı fiyatı telefonun gerçek ederine göre rastgele kabul eder ya da etmez.
+      const buyerAccepts = rng.nextFloat() < getBuyerAcceptChance(currentOffer, selItem.actualValue);
+      store.setRngState(rng.getState());
+      const offerRatio = currentOffer / Math.max(selItem.actualValue, 1);
 
       cust.bargainRound += 1;
       timeMinutes = Math.min(19 * 60, timeMinutes + 10);
 
-      if (currentOffer <= buyerBudget) {
+      if (buyerAccepts) {
         audio.playCash();
         stockItems.splice(selectedStockIdx, 1);
         store.addMoney(currentOffer);
@@ -1640,7 +1648,7 @@ function buildInterface(
         lastTransactionSummary = null;
         customersServedToday += 1;
         store.addReputation(-1);
-        cust.lastResponse = `Bütçem en fazla ₺${buyerBudget.toLocaleString("tr-TR")} usta, ₺${currentOffer.toLocaleString("tr-TR")} beni aşıyor.`;
+        cust.lastResponse = `₺${currentOffer.toLocaleString("tr-TR")} bu telefona fazla geldi usta, vazgeçtim.`;
         titleEl.textContent = "Satış gerçekleşmedi";
         copyEl.textContent = cust.lastResponse;
         notify("Müşteri bütçesine uygun bulmadı ve ayrıldı.");
@@ -1654,10 +1662,10 @@ function buildInterface(
 
       audio.playTap();
       const rem = cust.maxBargainRounds - cust.bargainRound;
-      cust.lastResponse = `₺${currentOffer.toLocaleString("tr-TR")} bütçemi aşıyor usta! En fazla ₺${buyerBudget.toLocaleString("tr-TR")} verebilirim (${rem} teklif hakkın kaldı).`;
-      titleEl.textContent = `Müşteri bütçesi: ₺${buyerBudget.toLocaleString("tr-TR")}`;
+      cust.lastResponse = `${offerRatio > 1.25 ? "Bu fiyat çok yüksek usta!" : "Biraz pahalı geldi usta."} Fiyatı düşürürsen düşünürüm (${rem} teklif hakkın kaldı).`;
+      titleEl.textContent = "Müşteri kararsız kaldı";
       copyEl.textContent = cust.lastResponse;
-      notify(`Müşteri indirim istiyor (Bütçe: ₺${buyerBudget.toLocaleString("tr-TR")})`);
+      notify("Müşteri fiyatı kabul etmedi · indirim istiyor");
       updateCustomerHeader();
       updateHUD(store.getState());
       renderDiagnosticArea();
@@ -1912,7 +1920,9 @@ function buildInterface(
         ? roundTo50(encounter.phone.baseValue * 0.82)
         : encounter.customer.intent === "repair"
           ? roundTo50(encounter.customer.initialAskPrice * 0.95)
-          : (encounter.customer.buyerBudget ?? 10000);
+          : stockItems.length > 0
+            ? getSuggestedBuyerPrice(stockItems[Math.max(0, Math.min(selectedStockIdx, stockItems.length - 1))]!)
+            : (encounter.customer.buyerBudget ?? 10000);
     dealFinished = false;
     repairAgreed = false;
     workshopRepaired = false;

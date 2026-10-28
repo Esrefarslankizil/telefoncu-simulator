@@ -240,13 +240,14 @@ async function bootstrap(): Promise<void> {
     {
       fixedUpdate: (seconds) => {
         ui.updateTick(seconds);
+        if (workshop.isWorkshopActive) workshop.update(seconds);
         if (!workshop.isWorkshopActive && phone.visible && !ui!.isInspecting() && !ui!.isUserDraggingPhone()) {
           phone.rotation.y += seconds * 0.16;
         }
       },
       render: () => {
         const now = performance.now();
-        const isBusy = now < activeWakeUntil;
+        const isBusy = now < activeWakeUntil || workshop.isWorkshopActive;
         const minIntervalMs = isBusy ? 32 : 160;
         if (now - previousRenderTime < minIntervalMs) {
           return;

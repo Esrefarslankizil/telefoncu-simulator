@@ -24,6 +24,7 @@ import { GameStore } from "./core/GameStore";
 import type { QualityPreference } from "./core/GameStore";
 import { SeededRNG } from "./core/SeededRNG";
 import {
+  DEFECT_POOL,
   INSPECTION_CATEGORIES,
   generateCustomerEncounter,
   getBatteryRating,
@@ -408,6 +409,21 @@ function buildInterface(
   let workshopRepaired = false;
   let bubbleAction: "inspect" | "offer" | "reject" | "close" = "close";
   let falseDiagnosisClaimed = false;
+  let successfulLieDiscount = 0;
+  let caughtLies = 0;
+  let successfulLies = 0;
+  const rejectedClaims = new Set<InspectionCategoryId>();
+  const claimLines: string[] = [];
+  const claimPhrases: Record<InspectionCategoryId, string> = {
+    battery: "Batarya bozuk",
+    camera: "Kamera bozuk",
+    screen: "Ekran çatlak",
+  };
+  const claimDenials: Record<InspectionCategoryId, string> = {
+    battery: "Hayır usta, pilimde hiçbir sorun yok.",
+    camera: "Hayır usta, kameram gayet düzgün çalışıyor.",
+    screen: "Hayır usta, ekranım çatlak değil.",
+  };
   let pendingPlayerOfferText = "";
   const diagnosedCategories = new Set<InspectionCategoryId>();
   const diagnosisOptions: ReadonlyArray<{ id: InspectionCategoryId; label: string }> = [
@@ -859,6 +875,7 @@ function buildInterface(
     if (screenHint) {
       screenHint.innerHTML = `<b>👆👆 Çift Dokun:</b> Ekranı ${isScreenPoweredOn ? "Kapat" : "Aç"}`;
     }
+    renderDiagnosisPanel();
   };
 
   const runBatteryTest3Seconds = (): void => {
@@ -1003,63 +1020,146 @@ function buildInterface(
     wakeRender(1200);
   };
 
+  /** Oyuncunun söylediği arıza için tahmini değer kaybı (olmayan arıza söylenirse buna göre fiyat oynar). */
+  const estimateDefectLoss = (category: InspectionCategoryId): number => {
+    const pool = DEFECT_POOL[category];
+    const avgRatio = pool.reduce((sum, item) => sum + item.lossRatio, 0) / Math.max(pool.length, 1);
+    return roundTo50(encounter.phone.baseValue * avgRatio);
+  };
+
+  const showCustomerObjection = (text: string): void => {
+    openSpeechBubble(text, "customer");
+    bubbleAction = "close";
+    bubbleFooterText.textContent = "Müşteri yalanını fark etti";
+    const dismiss = speechBubbleOverlay.querySelector<HTMLButtonElement>(".bubble-dismiss-btn");
+    if (dismiss) dismiss.innerHTML = "DEVAM ET <span>→</span>";
+  };
+
   const renderDiagnosisPanel = (): void => {
-    if (encounter.customer.intent !== "repair") {
+    const intent = encounter.customer.intent;
+    if (intent !== "repair" && intent !== "sell") {
       diagnosisPanel.hidden = true;
       return;
     }
     diagnosisPanel.hidden = false;
     const phoneData = encounter.phone;
     diagnosisOptionsRoot.innerHTML = diagnosisOptions.map((option) => {
-      const checked = phoneData.inspected[option.id];
-      const defect = phoneData.defects.find((item) => item.category === option.id);
-      const reportedByCustomer = encounter.customer.repairTargetDefect?.category === option.id;
-      const alreadyReported = diagnosedCategories.has(option.id);
-      const state = alreadyReported ? "MÜŞTERİYE BİLDİRİLDİ" : !checked ? (reportedByCustomer ? "ŞİKÂYETİ TEST ET" : "ÖNCE TEST ET") : defect ? "ARIZA BULUNDU" : "TEST TEMİZ";
-      return '<button type="button" class="diagnosis-option ' + (defect && checked ? "fault" : checked ? "clear" : "") + '" data-diagnosis="' + option.id + '" ' + (!checked || alreadyReported ? "disabled" : "") + '><span>' + option.label + '</span><small>' + state + '</small></button>';
+      const tested = phoneData.inspected[option.id];
+      const testedDefect = phoneData.defects.some((item) => item.category === option.id);
+      const claimed = diagnosedCategories.has(option.id);
+      const rejected = rejectedClaims.has(option.id);
+      const state = claimed ? "MÜŞTERİYE SÖYLENDİ" : rejected ? "MÜŞTERİ İTİRAZ ETTİ" : tested ? (testedDefect ? "TESTTE ARIZA ÇIKTI" : "TEST TEMİZ ÇIKTI") : "HENÜZ TEST ETMEDİN";
+      const tone = claimed ? "claimed" : rejected ? "rejected" : tested ? (testedDefect ? "fault" : "clear") : "";
+      const locked = claimed || rejected || dealFinished;
+      return '<button type="button" class="diagnosis-option ' + tone + '" data-diagnosis="' + option.id + '" ' + (locked ? "disabled" : "") + '><span>' + claimPhrases[option.id] + '</span><small>' + state + '</small></button>';
     }).join("") + '<button type="button" class="primary-btn inspection-finished-btn">İNCELEME BİTTİ <span>→</span></button>';
   };
 
+  /**
+   * Oyuncu müşteriye bir arıza söyler. Gerçek arıza ise fiyat gerçek mantıkla değişir;
+   * olmayan bir arıza ise müşteri (kişiliğine göre) bazen yalanı fark eder, bazen anlamaz.
+   *  - Satış müşterisi: söylenen arıza kadar fiyat kırılır.
+   *  - Tamir müşterisi: şikâyet dışındaki her ek sorun için ücret yükselir.
+   */
   const reportDiagnosisToCustomer = (category: InspectionCategoryId): void => {
     const { phone: ph, customer: cust } = encounter;
-    if (cust.intent !== "repair" || dealFinished || !ph.inspected[category] || diagnosedCategories.has(category)) return;
-    diagnosedCategories.add(category);
-    const categoryLabel = diagnosisOptions.find((option) => option.id === category)?.label ?? category;
+    const isRepair = cust.intent === "repair";
+    if ((!isRepair && cust.intent !== "sell") || dealFinished || diagnosedCategories.has(category) || rejectedClaims.has(category)) return;
+    audio.unlock();
+    const phrase = claimPhrases[category];
     const defect = ph.defects.find((item) => item.category === category);
-    let line: string;
+    const wasKnown = defect?.found === true;
+    const estLoss = defect ? defect.valueLoss : estimateDefectLoss(category);
+    const lira = (value: number): string => "₺" + value.toLocaleString("tr-TR");
 
     if (!defect) {
-      falseDiagnosisClaimed = true;
-      currentOffer = roundTo50(currentOffer + 1000);
-      cust.currentAskPrice = roundTo50(cust.currentAskPrice + 1000);
-      cust.minAcceptPrice = roundTo50(cust.minAcceptPrice + 1000);
-      line = categoryLabel + " arızalı görünüyor. Bu ek onarım için teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
-      notify("Arıza müşteriye bildirildi · Teklife ₺1.000 eklendi.");
-    } else {
+      // Oyuncu olmayan bir arızayı söylüyor: müşteri bazen anlar, bazen anlamaz.
+      const baseNotice: Record<string, number> = { savvy: 0.75, stingy: 0.55, flexible: 0.35, hurried: 0.2 };
+      const noticeChance = Math.min(0.95, (baseNotice[cust.personality.id] ?? 0.4) + 0.1 * (caughtLies + successfulLies));
+      const noticed = rng.nextFloat() < noticeChance;
+      store.setRngState(rng.getState());
+      if (noticed) {
+        rejectedClaims.add(category);
+        caughtLies += 1;
+        store.addReputation(-1);
+        cust.patience = Math.max(0, cust.patience - Math.round(30 * cust.personality.patienceDecay));
+        const leaves = caughtLies >= 2 || cust.patience <= 0;
+        const objection = leaves
+          ? "Beni kandırmaya çalışıyorsun usta! Başka dükkâna gidiyorum."
+          : claimDenials[category] + " Beni kandırmaya çalışma usta!";
+        cust.lastResponse = objection;
+        if (leaves) {
+          audio.playFail();
+          dealFinished = true;
+          customersServedToday += 1;
+          store.addReputation(-2);
+          titleEl.textContent = "Müşteri yalanını yakaladı ve ayrıldı";
+          copyEl.textContent = "Olmayan arızaları söylemek güveni bozdu. Dürüst teşhis müşteriyi elde tutar.";
+          notify("Müşteri yalanını yakaladı ve ayrıldı · İtibar −3");
+        } else {
+          audio.playTap();
+          titleEl.textContent = "Müşteri yalanını fark etti";
+          copyEl.textContent = "“" + phrase + "” demiştin ama müşteri anladı. Bir daha denersen gidebilir.";
+          notify("Müşteri yalanını fark etti · İtibar −1");
+        }
+        showCustomerObjection(objection);
+        sync3DSceneToEncounter();
+        updateCustomerHeader();
+        updateHUD(store.getState());
+        updateInspectionHud();
+        renderInspectionGrid();
+        renderDiagnosisPanel();
+        renderDiagnosticArea();
+        return;
+      }
+      successfulLies += 1;
+    }
+
+    diagnosedCategories.add(category);
+    if (defect) {
       defect.found = true;
-      const requestedDefect = cust.repairTargetDefect;
-      const isAdditionalRepair = requestedDefect !== undefined && requestedDefect.id !== defect.id;
-      if (isAdditionalRepair) {
+      ph.inspected[category] = true;
+      audio.playDefect();
+    } else {
+      audio.playTap();
+    }
+
+    let line: string;
+    if (isRepair) {
+      const requested = cust.repairTargetDefect;
+      if (requested !== undefined && requested.category === category) {
+        line = phrase + " şikâyetini doğruladım. Tamir teklifim " + lira(currentOffer) + ".";
+        notify("Müşteri şikâyeti doğrulandı: " + phrase + ".");
+      } else {
         currentOffer = roundTo50(currentOffer + 1000);
         cust.currentAskPrice = roundTo50(cust.currentAskPrice + 1000);
         cust.minAcceptPrice = roundTo50(cust.minAcceptPrice + 1000);
-        const firstName = requestedDefect?.title ?? "İlk arıza";
-        line = firstName + " arızasına ek olarak " + defect.title + " da bozuk. Bu ek onarım için ücretimi ₺1.000 artırıyorum. Yeni teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
-        notify("Ek arıza doğru tespit edildi · Tamir teklifine ₺1.000 eklendi.");
-      } else {
-        line = defect.title + " arızasını doğruladım. Tamir teklifim ₺" + currentOffer.toLocaleString("tr-TR") + ".";
-        notify("Müşteri şikâyeti doğrulandı: " + defect.title + ".");
+        line = phrase + ". Bu ek onarım için ücretimi ₺1.000 artırıyorum, yeni teklifim " + lira(currentOffer) + ".";
+        cust.lastResponse = defect ? "Öyle mi, bilmiyordum. Tamam usta, onu da yap." : "Öyle mi usta? Ben fark etmemiştim... Peki, onu da yap.";
+        notify("Ek arıza bildirildi · Tamir teklifine ₺1.000 eklendi.");
       }
-      audio.playDefect();
+    } else if (wasKnown) {
+      line = phrase + " konusunu zaten konuşmuştuk, fiyatım " + lira(currentOffer) + ".";
+    } else {
+      const discount = roundTo50(estLoss * cust.personality.defectConcession);
+      cust.minAcceptPrice = Math.max(400, cust.minAcceptPrice - discount);
+      cust.currentAskPrice = Math.max(cust.minAcceptPrice, cust.currentAskPrice - roundTo50(discount * 0.85));
+      if (!defect) successfulLieDiscount += roundTo50(estLoss * 0.85);
+      currentOffer = roundTo50(Math.max(400, getKnownPhoneValue(ph) * 0.85 - successfulLieDiscount));
+      cust.lastResponse = defect ? "Haklısın usta, " + phrase.toLowerCase() + ". Fiyatı düşürmek zorundayım." : "Hımm, öyle mi? Ben bilmiyordum... Peki fiyatı düşüreyim.";
+      line = phrase + ", o yüzden fiyatı kırıyorum. Teklifim " + lira(currentOffer) + ".";
+      notify("Pazarlıkta fiyat kırıldı · " + phrase);
     }
 
+    claimLines.push(line);
+    pendingPlayerOfferText = "Telefonu inceledim. " + claimLines.join(" ");
+    sync3DSceneToEncounter();
+    updateCustomerHeader();
     updateHUD(store.getState());
     updateInspectionHud();
+    renderInspectionGrid();
     renderDiagnosisPanel();
     renderDiagnosticArea();
-    pendingPlayerOfferText = "Telefonu inceledim. " + line;
-    updateInspectionHud();
-    renderDiagnosisPanel();
   };
 
   diagnosisOptionsRoot.addEventListener("click", (event) => {
@@ -1155,7 +1255,7 @@ function buildInterface(
       notify("✓ " + catInfo.title + " sorunsuz.");
     }
 
-    if (cust.intent !== "repair") currentOffer = roundTo50(getKnownPhoneValue(ph) * 0.85);
+    if (cust.intent !== "repair") currentOffer = roundTo50(Math.max(400, getKnownPhoneValue(ph) * 0.85 - successfulLieDiscount));
     renderDiagnosisPanel();
     if (cust.patience <= 0) {
       audio.playFail();
@@ -1983,6 +2083,11 @@ function buildInterface(
     diagnosedCategories.clear();
     pendingPlayerOfferText = "";
     falseDiagnosisClaimed = false;
+    rejectedClaims.clear();
+    claimLines.length = 0;
+    caughtLies = 0;
+    successfulLies = 0;
+    successfulLieDiscount = 0;
     lastTransactionSummary = null;
     phonePlacedSoundPlayed = false;
     isScreenPoweredOn = false;
@@ -2035,6 +2140,11 @@ function buildInterface(
     diagnosedCategories.clear();
     pendingPlayerOfferText = "";
     falseDiagnosisClaimed = false;
+    rejectedClaims.clear();
+    claimLines.length = 0;
+    caughtLies = 0;
+    successfulLies = 0;
+    successfulLieDiscount = 0;
     lastTransactionSummary = null;
     if (batteryTestInterval !== null) {
       clearInterval(batteryTestInterval);

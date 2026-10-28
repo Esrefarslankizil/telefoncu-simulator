@@ -71,7 +71,7 @@ export const SHELL_HTML = `<header class="topbar">
         </div>
       </div>
 
-      <aside class="diagnosis-side-panel" data-diagnosis-panel hidden><div class="diagnosis-panel-title">ARIZA TESPİTİ</div><p>Önce telefonu test et, sonra doğru arızayı seç.</p><div data-diagnosis-options></div></aside>
+      <aside class="diagnosis-side-panel" data-diagnosis-panel hidden><div class="diagnosis-panel-title">MÜŞTERİYE NE SÖYLEYECEKSİN?</div><p>Test ettiklerine göre arızayı bildir. İstersen olmayan bir arıza da söyleyebilirsin; ama müşteri bazen yalanı fark eder.</p><div data-diagnosis-options></div></aside>
       <div class="inspect-hints-bar">
         <span class="hint-pill" data-hint="battery"><b>⚡ Test Kablosunu Bağla:</b> Batarya Test Cihazı</span>
         <span class="hint-pill" data-hint="screen"><b>👆👆 Çift Dokun:</b> Ekranı Aç/Kapat</span>

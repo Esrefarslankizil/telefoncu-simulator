@@ -15,7 +15,6 @@ import type { GameEvents } from "./core/GameEvents";
 import { GameLoop } from "./core/GameLoop";
 import { GameStore } from "./core/GameStore";
 import { SeededRNG } from "./core/SeededRNG";
-import { DebugOverlay } from "./debug/DebugOverlay";
 import { QualityManager } from "./performance/QualityManager";
 import { SaveSystem } from "./persistence/SaveSystem";
 import { RepairWorkshop } from "./workshop/RepairWorkshop";
@@ -113,7 +112,6 @@ async function bootstrap(): Promise<void> {
   const rng = new SeededRNG(store.getState().rngState);
   const qualityManager = new QualityManager(renderer, events, store.getState().settings.quality);
   const assetLoader = new AssetLoader(renderer, events);
-  const debugOverlay = new DebugOverlay(renderer);
   let ui: ShopUiHandle | null = null;
   const workshop = new RepairWorkshop({
     uiRoot, shopScene: scene, phone, phoneBack, phoneScreen: screen, store, audio,
@@ -247,7 +245,6 @@ async function bootstrap(): Promise<void> {
         }
 
         renderer.render(workshop.isWorkshopActive ? workshop.scene : scene, workshop.isWorkshopActive ? workshop.camera : camera);
-        debugOverlay.update(frameDelta);
       },
     },
     events,
@@ -264,7 +261,6 @@ async function bootstrap(): Promise<void> {
     gameLoop.destroy();
     qualityManager.destroy();
     assetLoader.destroy();
-    debugOverlay.destroy();
     workshop.destroy();
     unsubscribeSettings();
     saveSystem.destroy();

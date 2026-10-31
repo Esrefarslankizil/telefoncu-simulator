@@ -70,8 +70,8 @@ export const SHELL_HTML = `<header class="topbar">
         <div><small>TOPLAM BAKİYE</small><b data-money></b></div>
         <div><small>İTİBAR</small><b data-rep></b></div>
         <div><small>GÜN</small><b data-day></b></div>
-        <div class="stat-clock-card" style="background:rgba(234,179,8,0.14);border:1px solid rgba(234,179,8,0.45);border-radius:6px;padding:2px 10px;text-align:right;"><small style="color:#fef08a;font-weight:700;letter-spacing:0.04em;">SAAT</small><b data-clock style="color:#facc15;font-size:16px;font-family:monospace;font-weight:800;display:block;">09:00</b></div>
       </div>
+      <div class="hud-clock-badge" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#172521f5;border:1.5px solid #facc15;border-radius:8px;padding:3px 12px;min-width:74px;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,0.45);"><small style="color:#fef08a;font-size:9px;font-weight:800;letter-spacing:0.08em;line-height:1.2;">SAAT</small><b data-clock style="color:#facc15;font-size:16px;font-family:monospace;font-weight:900;line-height:1.2;">09:00</b></div>
       <button class="icon-btn fullscreen-toggle" aria-label="Tam Ekran ve Yatay Mod" title="Tam Ekran (Yatay Mod)">⛶</button>
       <button class="icon-btn settings-open" aria-label="Ayarlar ve Gün Sonu">⚙</button>
     </header>

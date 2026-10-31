@@ -165,9 +165,12 @@ export class AudioSystem {
     this.unlock();
     try {
       if (!this.talkAudio) {
-        this.talkAudio = new Audio("./audio/talk_8bit.mp3");
-        this.talkAudio.volume = 0.7;
+        const base = (import.meta as any).env?.BASE_URL ?? "./";
+        const cleanBase = base.endsWith("/") ? base : `${base}/`;
+        this.talkAudio = new Audio(`${cleanBase}audio/talk_8bit.mp3`);
+        this.talkAudio.volume = 0.75;
       }
+      this.talkAudio.loop = true;
       this.talkAudio.currentTime = 0;
       const playPromise = this.talkAudio.play();
       if (playPromise) {

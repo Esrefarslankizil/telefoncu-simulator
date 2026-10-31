@@ -25,6 +25,9 @@ export class HudController {
   private bubbleName: HTMLElement;
   private bubbleText: HTMLElement;
   private bubbleIntent: HTMLElement;
+  private typewriterTimer: number | null = null;
+  private currentFullText = "";
+  private isTyping = false;
 
   private workersModalEl: HTMLElement | null;
   private workersListEl: HTMLElement | null;
@@ -71,16 +74,31 @@ export class HudController {
       if (e.target === this.workersModalEl) this.closeWorkersModal();
     });
 
-    const closeBubble = () => {
+    const handleBubbleClick = () => {
+      if (this.isTyping && this.typewriterTimer !== null) {
+        clearInterval(this.typewriterTimer);
+        this.typewriterTimer = null;
+        this.isTyping = false;
+        this.bubbleText.textContent = this.currentFullText;
+        this.audio.stopCustomerSpeech();
+        this.audio.playTap();
+        this.wakeRender(400);
+        return;
+      }
+      if (this.typewriterTimer !== null) {
+        clearInterval(this.typewriterTimer);
+        this.typewriterTimer = null;
+      }
+      this.isTyping = false;
       this.speechBubbleOverlay.hidden = true;
       this.speechBubbleOverlay.style.display = "none";
       this.audio.stopCustomerSpeech();
       this.audio.playTap();
       this.wakeRender(400);
     };
-    bubbleDismissBtn?.addEventListener("click", closeBubble);
+    bubbleDismissBtn?.addEventListener("click", handleBubbleClick);
     this.speechBubbleOverlay.addEventListener("click", (e) => {
-      if (e.target === this.speechBubbleOverlay) closeBubble();
+      if (e.target === this.speechBubbleOverlay) handleBubbleClick();
     });
 
     window.addEventListener("keydown", (e) => {
@@ -128,14 +146,42 @@ export class HudController {
     this.speechBubbleOverlay.classList.toggle("player-speech", speaker === "player");
     this.bubbleAvatar.textContent = speaker === "player" ? "🧑‍🔧" : initials;
     this.bubbleName.textContent = speaker === "player" ? "Sen · Telefoncu" : name;
-    this.bubbleText.textContent = text;
     this.bubbleIntent.className = "bubble-intent-badge " + (speaker === "player" ? "repair" : intent);
     this.bubbleIntent.textContent = speaker === "player" ? "TEKLİF" : intent.toUpperCase();
     this.speechBubbleOverlay.hidden = false;
     this.speechBubbleOverlay.style.display = "flex";
     this.wakeRender(400);
-    if (speaker === "customer") this.audio.playCustomerSpeech();
-    else this.audio.playTap();
+
+    if (this.typewriterTimer !== null) {
+      clearInterval(this.typewriterTimer);
+      this.typewriterTimer = null;
+    }
+
+    this.currentFullText = text;
+    this.isTyping = true;
+    this.bubbleText.textContent = "";
+
+    if (speaker === "customer") {
+      this.audio.playCustomerSpeech();
+    } else {
+      this.audio.playTap();
+    }
+
+    let charIdx = 0;
+    this.typewriterTimer = window.setInterval(() => {
+      charIdx += 1;
+      this.bubbleText.textContent = text.slice(0, charIdx);
+      this.wakeRender(50);
+
+      if (charIdx >= text.length) {
+        if (this.typewriterTimer !== null) {
+          clearInterval(this.typewriterTimer);
+          this.typewriterTimer = null;
+        }
+        this.isTyping = false;
+        this.audio.stopCustomerSpeech();
+      }
+    }, 28);
   }
 
   public updateHUD(state: ReturnType<GameStore["getState"]>): void {

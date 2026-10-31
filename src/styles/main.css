@@ -1194,3 +1194,31 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
 }
 .stock-repair-btn:hover { background: var(--gold); color: #17231f; }
 .stock-clean-pill { color: #7ee0a8; font: 700 9.5px var(--mono); }
+
+/* Genel Küçük Soru İşareti (?) Yardım Butonu */
+.ui-help-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin-left: 5px;
+  border: 1px solid rgba(234, 179, 8, 0.7);
+  border-radius: 50%;
+  background: rgba(234, 179, 8, 0.16);
+  color: #facc15;
+  font: 800 11px var(--mono);
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.15s ease;
+  vertical-align: middle;
+}
+.ui-help-btn:hover {
+  background: rgba(234, 179, 8, 0.45);
+  transform: scale(1.15);
+  color: #fff;
+  border-color: #fde047;
+}

@@ -2,9 +2,18 @@
 export const SHELL_HTML = `<header class="topbar">
       <div class="brand">
 
-        <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Menüyü aç"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
-        <button class="stock-menu-btn" data-open-workers-btn type="button" title="Tamir Atölyesi ve İşçiler" style="margin-left:6px;border-color:rgba(234,179,8,0.5);"><span class="stock-menu-icon">🛠️</span><span class="stock-menu-label">ATÖLYE &amp; İŞÇİLER</span><em data-workers-badge hidden style="background:#eab308;color:#000;">1</em></button>
-        <button class="stock-menu-btn" data-open-casino-btn type="button" title="Şans Oyunları & Kumar" style="margin-left:6px;border-color:rgba(168,85,247,0.6);"><span class="stock-menu-icon">🎰</span><span class="stock-menu-label">ŞANS OYUNLARI</span></button>
+        <div style="display:inline-flex;align-items:center;">
+          <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Menüyü aç"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
+          <button type="button" class="ui-help-btn" data-help-topic="menu" title="Menü hakkında bilgi">?</button>
+        </div>
+        <div style="display:inline-flex;align-items:center;margin-left:6px;">
+          <button class="stock-menu-btn" data-open-workers-btn type="button" title="Tamir Atölyesi ve İşçiler" style="border-color:rgba(234,179,8,0.5);"><span class="stock-menu-icon">🛠️</span><span class="stock-menu-label">ATÖLYE &amp; İŞÇİLER</span><em data-workers-badge hidden style="background:#eab308;color:#000;">1</em></button>
+          <button type="button" class="ui-help-btn" data-help-topic="workers" title="Atölye ve işçiler hakkında bilgi">?</button>
+        </div>
+        <div style="display:inline-flex;align-items:center;margin-left:6px;">
+          <button class="stock-menu-btn" data-open-casino-btn type="button" title="Şans Oyunları & Kumar" style="border-color:rgba(168,85,247,0.6);"><span class="stock-menu-icon">🎰</span><span class="stock-menu-label">ŞANS OYUNLARI</span></button>
+          <button type="button" class="ui-help-btn" data-help-topic="casino" title="Şans oyunları hakkında bilgi">?</button>
+        </div>
         <section class="stock-menu-panel" data-stock-menu role="menu" aria-label="Ana Menü" hidden>
           <header class="stock-menu-head"><div><small>CEP DÜKKÂNI</small><strong>Menü</strong></div><button class="stock-menu-close" data-stock-menu-close type="button" aria-label="Kapat">✕</button></header>
           <div class="menu-nav-list">
@@ -79,13 +88,31 @@ export const SHELL_HTML = `<header class="topbar">
             <div class="casino-content" data-casino-body style="padding:14px;display:flex;flex-direction:column;gap:12px;"></div>
           </section>
         </div>
+        <div class="stock-list-backdrop" data-help-modal hidden style="z-index:99999;">
+          <section class="stock-list-modal help-modal" role="dialog" aria-label="Bilgi ve Rehber" style="max-width:440px;">
+            <header class="stock-menu-head">
+              <div><small style="color:var(--gold,#facc15);font-weight:700;">BİLGİ &amp; REHBER</small><strong data-help-title style="font-size:16px;">Konu</strong></div>
+              <button class="stock-menu-close" data-help-close type="button" aria-label="Kapat">✕</button>
+            </header>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+              <div style="display:flex;gap:12px;align-items:flex-start;">
+                <span data-help-icon style="font-size:32px;line-height:1;">ℹ️</span>
+                <p data-help-desc style="margin:0;font-size:13px;line-height:1.6;color:#e2e8f0;"></p>
+              </div>
+              <button type="button" class="action-btn" data-help-ok-btn style="padding:9px;background:var(--gold,#eab308);color:#000;font-weight:800;border:none;border-radius:6px;cursor:pointer;">ANLADIM ✓</button>
+            </div>
+          </section>
+        </div>
       </div>
       <div class="stats">
         <div><small>TOPLAM BAKİYE</small><b data-money></b></div>
         <div><small>İTİBAR</small><b data-rep></b></div>
         <div><small>GÜN</small><b data-day></b></div>
       </div>
-      <div class="hud-clock-badge" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#172521f5;border:1.5px solid #facc15;border-radius:8px;padding:3px 12px;min-width:74px;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,0.45);"><small style="color:#fef08a;font-size:9px;font-weight:800;letter-spacing:0.08em;line-height:1.2;">SAAT</small><b data-clock style="color:#facc15;font-size:16px;font-family:monospace;font-weight:900;line-height:1.2;">09:00</b></div>
+      <div style="display:inline-flex;align-items:center;">
+        <div class="hud-clock-badge" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#172521f5;border:1.5px solid #facc15;border-radius:8px;padding:3px 12px;min-width:74px;pointer-events:auto;box-shadow:0 4px 14px rgba(0,0,0,0.45);"><small style="color:#fef08a;font-size:9px;font-weight:800;letter-spacing:0.08em;line-height:1.2;">SAAT</small><b data-clock style="color:#facc15;font-size:16px;font-family:monospace;font-weight:900;line-height:1.2;">09:00</b></div>
+        <button type="button" class="ui-help-btn" data-help-topic="clock" title="Saat ve gün hakkında bilgi">?</button>
+      </div>
       <button class="icon-btn fullscreen-toggle" aria-label="Tam Ekran ve Yatay Mod" title="Tam Ekran (Yatay Mod)">⛶</button>
       <button class="icon-btn settings-open" aria-label="Ayarlar ve Gün Sonu">⚙</button>
     </header>
@@ -97,7 +124,10 @@ export const SHELL_HTML = `<header class="topbar">
         <strong data-customer-name>Tezgâhta Bekliyorsun</strong>
         <span data-customer-request>Sıradaki müşteri kapıdan girmek üzere...</span>
       </div>
-      <button class="quiet-btn next-customer" title="Beklemeden hemen çağır">🔔 KAPIDAN ÇAĞIR</button>
+      <div style="display:inline-flex;align-items:center;">
+        <button class="quiet-btn next-customer" title="Beklemeden hemen çağır">🔔 KAPIDAN ÇAĞIR</button>
+        <button type="button" class="ui-help-btn" data-help-topic="next_customer" title="Müşteri çağırma hakkında bilgi">?</button>
+      </div>
     </section>
 
     <div class="scene-label">
@@ -121,8 +151,14 @@ export const SHELL_HTML = `<header class="topbar">
       <div class="inspect-grid" data-inspect-grid hidden></div>
 
       <div class="action-row" data-main-actions>
-        <button class="secondary-btn inspect-btn" disabled>CİHAZI İNCELE</button>
-        <button class="primary-btn diagnose-btn" disabled>PAZARLIĞA GEÇ <span>→</span></button>
+        <div style="flex:1;display:flex;align-items:center;">
+          <button class="secondary-btn inspect-btn" style="flex:1;" disabled>CİHAZI İNCELE</button>
+          <button type="button" class="ui-help-btn" data-help-topic="inspect" title="İnceleme hakkında bilgi">?</button>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;">
+          <button class="primary-btn diagnose-btn" style="flex:1;" disabled>PAZARLIĞA GEÇ <span>→</span></button>
+          <button type="button" class="ui-help-btn" data-help-topic="diagnose" title="Pazarlık ve arıza tespiti hakkında bilgi">?</button>
+        </div>
       </div>
 
       <div class="diagnostic" hidden></div>

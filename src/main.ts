@@ -292,5 +292,5 @@ function showError(root: HTMLElement, message: string): void {
 void bootstrap().catch((error: unknown) => {
   console.error("Game startup failed.", error);
   const root = document.querySelector<HTMLElement>("#ui-root");
-  if (root) showError(root, "Oyun başlatılamadı. Geliştirici konsolundaki hata ayrıntılarına bakın.");
+  if (root) showError(root, "Oyun başlatılamadı: " + (error instanceof Error ? error.message : String(error)));
 });

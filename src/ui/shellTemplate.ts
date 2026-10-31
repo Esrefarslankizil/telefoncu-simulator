@@ -222,7 +222,7 @@ export const SHELL_HTML = `<header class="topbar">
         </div>
         <div class="action-row">
           <button class="secondary-btn manual-save-btn">KAYDET</button>
-          <button class="primary-btn close-day">GÜNÜ KAPAT <span>→</span></button>
+          <button class="primary-btn close-day advance-day-btn">GÜNÜ KAPAT <span>→</span></button>
         </div>
       </section>
     </div>

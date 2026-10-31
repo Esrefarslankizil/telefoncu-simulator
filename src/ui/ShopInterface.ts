@@ -159,16 +159,18 @@ export function buildInterface(
   const setStation = (st: StationId): void => {
     currentStation = st;
     resetCamLook();
+    const workPanel = shell.querySelector<HTMLElement>(".work-panel");
+    const inspectPanel = shell.querySelector<HTMLElement>(".inspection-hud, .inspect-panel");
     if (st === "repair") {
       camTargetPos.set(0.12, 1.48, 0.22);
       camTargetLook.set(0.12, 1.18, 0.22);
-      shell.querySelector<HTMLElement>(".work-panel")!.hidden = true;
-      shell.querySelector<HTMLElement>(".inspect-panel")!.hidden = false;
+      if (workPanel) workPanel.hidden = true;
+      if (inspectPanel) inspectPanel.hidden = false;
     } else {
       camTargetPos.set(0, 1.68, -0.85);
       camTargetLook.set(0, 1.40, 1.45);
-      shell.querySelector<HTMLElement>(".work-panel")!.hidden = false;
-      shell.querySelector<HTMLElement>(".inspect-panel")!.hidden = true;
+      if (workPanel) workPanel.hidden = false;
+      if (inspectPanel) inspectPanel.hidden = true;
     }
     wakeRender(1200);
   };
@@ -183,13 +185,13 @@ export function buildInterface(
     stationNav.append(btn);
   }
 
-  select<HTMLButtonElement>(".inspect-btn").addEventListener("click", () => setStation("repair"));
-  select<HTMLButtonElement>(".exit-inspect").addEventListener("click", () => setStation("counter"));
-  select<HTMLButtonElement>(".to-bargain-btn").addEventListener("click", () => {
+  shell.querySelector<HTMLButtonElement>(".inspect-btn")?.addEventListener("click", () => setStation("repair"));
+  shell.querySelector<HTMLButtonElement>(".exit-inspect, .exit-inspect-btn")?.addEventListener("click", () => setStation("counter"));
+  shell.querySelector<HTMLButtonElement>(".to-bargain-btn")?.addEventListener("click", () => {
     setStation("counter");
     bargainController.renderDiagnosticArea();
   });
-  select<HTMLButtonElement>(".diagnose-btn").addEventListener("click", () => bargainController.renderDiagnosticArea());
+  shell.querySelector<HTMLButtonElement>(".diagnose-btn")?.addEventListener("click", () => bargainController.renderDiagnosticArea());
 
   hud.nextCustomerBtn.addEventListener("click", () => {
     if (customerController.state === "WAITING") {
@@ -208,13 +210,13 @@ export function buildInterface(
   });
   orientationManager.bindFullscreenButton(shell.querySelector<HTMLButtonElement>(".fullscreen-toggle"));
 
-  select<HTMLButtonElement>(".settings-open").addEventListener("click", () => {
+  shell.querySelector<HTMLButtonElement>(".settings-open")?.addEventListener("click", () => {
     backdropEl.hidden = false;
   });
-  select<HTMLButtonElement>(".modal-close").addEventListener("click", () => {
+  shell.querySelector<HTMLButtonElement>(".modal-close")?.addEventListener("click", () => {
     backdropEl.hidden = true;
   });
-  select<HTMLButtonElement>(".advance-day-btn").addEventListener("click", () => {
+  shell.querySelector<HTMLButtonElement>(".close-day, .advance-day-btn")?.addEventListener("click", () => {
     store.advanceDay();
     timeManager.resetDay();
     customerController.customersServedToday = 0;

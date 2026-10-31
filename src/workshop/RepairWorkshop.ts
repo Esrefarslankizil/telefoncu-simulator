@@ -30,6 +30,8 @@ export interface WorkshopRepairJob {
   readonly defectId: string;
   readonly defectCategory: InspectionCategoryId;
   readonly defectTitle: string;
+  remainingSeconds?: number;
+  isRepaired?: boolean;
 }
 
 export interface RepairWorkshopOptions {
@@ -43,6 +45,7 @@ export interface RepairWorkshopOptions {
   readonly getRepairJob: () => WorkshopRepairJob | null;
   readonly onRepairComplete: (job: WorkshopRepairJob) => void;
   readonly onSceneChange: (active: boolean) => void;
+  readonly onAdvanceTimer?: (seconds: number) => void;
 }
 
 interface ScrewAnimState {
@@ -168,7 +171,8 @@ export class RepairWorkshop {
       "<small>TAMİR MASASI</small>" +
       "<h2 data-title></h2>" +
       "<p data-hint></p>" +
-      '<div class="workshop-job"><span>MODEL</span><b data-model>—</b><span>ARIZA</span><b data-defect>—</b></div>' +
+      '<div class="workshop-job"><span>MODEL</span><b data-model>—</b><span>ARIZA</span><b data-defect>—</b><span>SÜRE</span><b data-timer style="color:var(--gold,#facc15);">—</b><span>KAPASİTE</span><b data-worker-status>1/1 İşçi (Tek İşçi)</b></div>' +
+      '<div class="workshop-timer-bar" style="margin-bottom:8px;"><button type="button" data-ff-btn style="width:100%;background:rgba(234,179,8,0.16);border:1px solid #eab308;color:#fef08a;font-size:11px;font-weight:700;padding:6px 10px;border-radius:6px;cursor:pointer;">⏩ SÜREYİ 2 DK İLERLET (+2 Dk)</button></div>' +
       '<div class="workshop-tools">' +
       TOOLS.map((t) => '<button type="button" data-tool="' + t.id + '"><i style="--tool:' + t.color + '"></i>' + t.label + "</button>").join("") +
       "</div>" +
@@ -196,6 +200,14 @@ export class RepairWorkshop {
 
       const toolBtn = target.closest<HTMLButtonElement>("[data-tool]")?.dataset["tool"] as ToolId | undefined;
       if (toolBtn) this.quickUseTool(toolBtn);
+
+      const ffBtn = target.closest<HTMLButtonElement>("[data-ff-btn]");
+      if (ffBtn) {
+        this.options.onAdvanceTimer?.(120);
+        this.options.audio.playTap();
+        this.notify("⏱️ Süre 2 dakika ilerletildi.");
+        this.updateTimerDisplay();
+      }
     });
 
     this.action.addEventListener("click", () => this.handleActionBtn());
@@ -359,6 +371,7 @@ export class RepairWorkshop {
 
     // 4. Telefonun üzerinde aktif işlem ilerlemesi (Dwell sistemi)
     this.updateActiveStepWork(dt);
+    this.updateTimerDisplay();
 
     // 5. Test ekran parlama animasyonu
     if (this.isTestingAnim) {
@@ -957,6 +970,33 @@ export class RepairWorkshop {
     this.root.querySelectorAll<HTMLButtonElement>("[data-room]").forEach((b) => {
       b.classList.toggle("active", b.dataset["room"] === (this.active ? "workshop" : "counter"));
     });
+    this.updateTimerDisplay();
+  }
+
+  private updateTimerDisplay(): void {
+    const job = this.options.getRepairJob();
+    const timerEl = this.root.querySelector<HTMLElement>("[data-timer]");
+    const workerEl = this.root.querySelector<HTMLElement>("[data-worker-status]");
+    if (!timerEl || !workerEl) return;
+    if (!job) {
+      timerEl.textContent = "—";
+      workerEl.textContent = "Boşta (İş Yok)";
+      return;
+    }
+    workerEl.textContent = "1/1 İşçi Meşgul (Tek İşçi)";
+    if (job.isRepaired) {
+      timerEl.textContent = "✓ ONARILDI (Müşteri Bekleniyor)";
+      timerEl.style.color = "#4ade80";
+    } else if (job.remainingSeconds !== undefined) {
+      const sec = Math.max(0, Math.ceil(job.remainingSeconds));
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      timerEl.textContent = `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")} / 15 dk`;
+      timerEl.style.color = sec <= 60 ? "#ef4444" : "var(--gold, #facc15)";
+    } else {
+      timerEl.textContent = "İşlemde";
+      timerEl.style.color = "var(--gold, #facc15)";
+    }
   }
 
   private updateRayFromEvent(clientX: number, clientY: number): void {

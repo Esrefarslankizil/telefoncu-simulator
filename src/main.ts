@@ -149,6 +149,7 @@ async function bootstrap(): Promise<void> {
     getRepairJob: () => ui?.getWorkshopRepairJob() ?? null,
     onRepairComplete: (job) => ui?.completeWorkshopRepair(job),
     onSceneChange: (active) => { if (!active) ui?.returnToCounter(); wakeRender(1800); },
+    onAdvanceTimer: (sec) => ui?.advanceBenchTimer(sec),
   });
 
   // Birinci şahıs kamera hedefleri
@@ -314,6 +315,7 @@ interface ShopUiHandle {
   isInspecting: () => boolean;
   getWorkshopRepairJob: () => WorkshopRepairJob | null;
   completeWorkshopRepair: (job: WorkshopRepairJob) => void;
+  advanceBenchTimer: (seconds: number) => void;
   returnToCounter: () => void;
   destroy: () => void;
 }
@@ -409,6 +411,19 @@ function buildInterface(
   let dealFinished = false;
   let repairAgreed = false;
   let workshopRepaired = false;
+
+  interface ActiveBenchRepair {
+    customer: ReturnType<typeof generateCustomerEncounter>["customer"];
+    phone: ReturnType<typeof generateCustomerEncounter>["phone"];
+    defect: ReturnType<typeof generateCustomerEncounter>["phone"]["defects"][number];
+    agreedPrice: number;
+    partCost: number;
+    remainingSeconds: number;
+    totalSeconds: number;
+    isRepaired: boolean;
+  }
+  let activeBenchRepair: ActiveBenchRepair | null = null;
+  let isReturningCustomerActive = false;
   let bubbleAction: "inspect" | "offer" | "reject" | "close" = "close";
   let falseDiagnosisClaimed = false;
   let successfulLieDiscount = 0;
@@ -834,8 +849,32 @@ function buildInterface(
   };
 
   const updateCustomerHeader = (): void => {
+    if (isReturningCustomerActive && activeBenchRepair) {
+      customerInitials.textContent = activeBenchRepair.customer.initials;
+      customerEyebrow.textContent = activeBenchRepair.isRepaired ? "CİHAZI ALMAYA GELDİ · TAMİR EDİLDİ" : "CİHAZI ALMAYA GELDİ · SÜRE DOLDU!";
+      customerName.textContent = activeBenchRepair.customer.name;
+      customerRequest.textContent = activeBenchRepair.isRepaired
+        ? `"Selam usta, 1 saat doldu telefonumu almaya geldim!"`
+        : `"Selam usta! 1 saat doldu, telefonum hazır mı?"`;
+      nextCustomerBtn.textContent = "TESLİMAT";
+      return;
+    }
+
     if (customerState === "WAITING") {
       customerInitials.textContent = "⏳";
+      if (activeBenchRepair) {
+        const sec = Math.max(0, Math.ceil(activeBenchRepair.remainingSeconds));
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const timeStr = `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+        customerEyebrow.textContent = `ATÖLYEDE TAMİRDE (TEK İŞÇİ) · KALAN: ${timeStr}`;
+        customerName.textContent = activeBenchRepair.isRepaired ? "✓ Tamir Bitti (Müşteri Bekleniyor)" : "Tamir Devam Ediyor";
+        customerRequest.textContent = activeBenchRepair.isRepaired
+          ? `${activeBenchRepair.customer.name} cihazı almaya gelecek (~${timeStr} kaldı).`
+          : `${activeBenchRepair.phone.brand} ${activeBenchRepair.phone.model} atölyede onarılıyor (~${timeStr} sonra müşteri gelecek).`;
+        nextCustomerBtn.textContent = "BEKLE";
+        return;
+      }
       customerEyebrow.textContent = "DÜKKÂN SAKİN · MÜŞTERİ BEKLENİYOR";
       customerName.textContent = "Tezgâhta Bekliyorsun";
       customerRequest.textContent = `Sıradaki müşteri ~${Math.max(1, Math.ceil(customerWaitTimer))} saniye içinde kapıdan girecek.`;
@@ -1370,6 +1409,83 @@ function buildInterface(
     renderDiagnosticArea();
   };
 
+  const finishReturningCustomerDelivery = (success: boolean): void => {
+    if (!activeBenchRepair) return;
+    const ph = activeBenchRepair.phone;
+    const cust = activeBenchRepair.customer;
+    const agreedPrice = activeBenchRepair.agreedPrice;
+    const partCost = activeBenchRepair.partCost;
+
+    if (success) {
+      audio.playCash();
+      const netProfit = agreedPrice - partCost;
+      store.addMoney(agreedPrice);
+      store.addReputation(4);
+      cust.lastResponse = "Harikasın usta! Telefon sıfır gibi olmuş, eline emeğine sağlık.";
+      notify(`✓ Telefon teslim edildi! +₺${agreedPrice.toLocaleString("tr-TR")} alındı (+4 İtibar).`);
+      lastTransactionSummary = {
+        intent: "repair",
+        phoneModel: ph.brand + " " + ph.model,
+        boughtPrice: agreedPrice,
+        actualValue: agreedPrice,
+        netProfit,
+        repDelta: 4,
+        foundDefects: [],
+        missedDefects: [],
+        stockUid: ph.uid,
+        sold: true,
+        repairTitle: activeBenchRepair.defect.title,
+        repairPartCost: partCost,
+      };
+    } else {
+      audio.playFail();
+      store.addReputation(-5);
+      cust.lastResponse = "1 saat geçti telefon hala yapılmamış! Böyle esnaflık olmaz, puanınızı kırıyorum!";
+      notify("❌ Telefon vaktinde tamir edilmediği için müşteri öfkelendi! (-5 İtibar)");
+    }
+    dealFinished = true;
+    customersServedToday += 1;
+    activeBenchRepair = null;
+    isReturningCustomerActive = false;
+    titleEl.textContent = success ? "Tamir teslim edildi · Müşteri memnun" : "Tamir gecikti · Müşteri öfkeli";
+    copyEl.textContent = cust.lastResponse;
+    updateCustomerHeader();
+    updateHUD(store.getState());
+    renderDiagnosticArea();
+  };
+
+  const bringReturningCustomerToCounter = (): void => {
+    if (!activeBenchRepair) return;
+    isReturningCustomerActive = true;
+    dealFinished = false;
+    repairAgreed = false;
+    workshopRepaired = activeBenchRepair.isRepaired;
+    encounter = {
+      phone: activeBenchRepair.phone,
+      customer: {
+        ...activeBenchRepair.customer,
+        intent: "repair",
+        speechText: activeBenchRepair.isRepaired
+          ? "Selam usta! 1 saat doldu, telefonumu almaya geldim."
+          : "Selam usta! 1 saat doldu, telefonum hazır mı?",
+      },
+    };
+    customerState = "WALKING_IN";
+    customerGroup.position.set(0, 0, 5.2);
+    customerGroup.rotation.y = Math.PI;
+    customerGroup.visible = true;
+    phone.visible = false;
+    audio.playDoorBell();
+    notify(`🔔 Kapı zili çaldı: ${activeBenchRepair.customer.name} telefonunu almaya geldi!`);
+    sync3DSceneToEncounter();
+    updateCustomerHeader();
+    updateHUD(store.getState());
+    setStation("counter");
+    if (!workshop.isWorkshopActive) {
+      openSpeechBubble(encounter.customer.speechText);
+    }
+  };
+
   const renderDiagnosticArea = (): void => {
     if (station === "display" || station === "stock") {
       mainActionsEl.hidden = true;
@@ -1520,6 +1636,86 @@ function buildInterface(
       diagnosticEl.innerHTML = `<div class="result-row"><span>İŞLEM SONUCU</span><b class="warn">ANLAŞMA SAĞLANAMADI</b></div>
         <div class="action-row"><button class="primary-btn dismiss-cust-btn">TEZGAHTA BEKLE <span>→</span></button></div>`;
       diagnosticEl.querySelector(".dismiss-cust-btn")?.addEventListener("click", () => {
+        dismissCustomerAndStartWaiting();
+      });
+      return;
+    }
+
+    if (isReturningCustomerActive && activeBenchRepair) {
+      mainActionsEl.hidden = true;
+      diagnosticEl.hidden = false;
+      const ph = activeBenchRepair.phone;
+      const cust = activeBenchRepair.customer;
+      const defectTitle = activeBenchRepair.defect.title;
+      const isRep = activeBenchRepair.isRepaired;
+
+      if (isRep) {
+        diagnosticEl.innerHTML = `
+          <div class="result-row">
+            <span>MÜŞTERİ TELEFONU ALMAYA GELDİ</span>
+            <b class="good">✓ TAMİR EDİLDİ</b>
+          </div>
+          <div class="quote-row">
+            <span><b>${cust.name}:</b> "Selam usta, 1 saat doldu telefonumu almaya geldim!"</span>
+          </div>
+          <div class="result-row">
+            <span>${ph.brand} ${ph.model} · ${defectTitle}</span>
+            <b class="good">ALINACAK: ₺${activeBenchRepair.agreedPrice.toLocaleString("tr-TR")}</b>
+          </div>
+          <div class="action-row">
+            <button class="primary-btn deliver-success-btn">TELEFONU TESLİM ET VE ÜCRETİ AL (+4 Puan) <span>→</span></button>
+          </div>
+        `;
+        diagnosticEl.querySelector(".deliver-success-btn")?.addEventListener("click", () => {
+          finishReturningCustomerDelivery(true);
+        });
+      } else {
+        diagnosticEl.innerHTML = `
+          <div class="result-row">
+            <span>MÜŞTERİ TELEFONU ALMAYA GELDİ</span>
+            <b class="bad">❌ TAMİR EDİLMEDİ!</b>
+          </div>
+          <div class="quote-row">
+            <span><b>${cust.name}:</b> "1 saat doldu usta! Telefonum hazır mı?"</span>
+          </div>
+          <div class="result-row">
+            <span>${ph.brand} ${ph.model} · ${defectTitle}</span>
+            <b class="bad">PUAN DÜŞECEK (-5 İtibar)</b>
+          </div>
+          <div class="action-row">
+            <button class="secondary-btn go-workshop-rush-btn">HEMEN ATÖLYEDE YAP (2)</button>
+            <button class="primary-btn deliver-fail-btn" style="background:#dc2626;">YAPILAMADI / ÖZÜR DİLE (-5 Puan) <span>→</span></button>
+          </div>
+        `;
+        diagnosticEl.querySelector(".go-workshop-rush-btn")?.addEventListener("click", () => {
+          workshop.enter();
+        });
+        diagnosticEl.querySelector(".deliver-fail-btn")?.addEventListener("click", () => {
+          finishReturningCustomerDelivery(false);
+        });
+      }
+      return;
+    }
+
+    if (encounter.customer.intent === "repair" && activeBenchRepair !== null && !isReturningCustomerActive) {
+      mainActionsEl.hidden = true;
+      diagnosticEl.hidden = false;
+      diagnosticEl.innerHTML = `
+        <div class="result-row" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;border-radius:6px;padding:8px;">
+          <span style="color:#fca5a5;">⚠️ ATÖLYE DOLU (TEK İŞÇİ)</span>
+          <b class="bad">İŞÇİ MEŞGUL</b>
+        </div>
+        <div class="quote-row">
+          <span>Şu an tezgahta <b>${activeBenchRepair.phone.brand} ${activeBenchRepair.phone.model}</b> tamir ediliyor. Tek işçi çalıştığı için yeni tamir alamayız.</span>
+        </div>
+        <div class="action-row">
+          <button class="primary-btn busy-dismiss-btn">MÜŞTERİYİ UĞURLA (KAPASİTE DOLU) <span>→</span></button>
+        </div>
+      `;
+      diagnosticEl.querySelector(".busy-dismiss-btn")?.addEventListener("click", () => {
+        audio.playTap();
+        encounter.customer.lastResponse = "Usta meşgulmüşsün, başka dükkana bakayım o zaman.";
+        notify("Atölye kapasitesi dolu olduğu için müşteri başka dükkana yönlendirildi.");
         dismissCustomerAndStartWaiting();
       });
       return;
@@ -1741,44 +1937,14 @@ function buildInterface(
     });
   };
 
-  const finishRepairTransaction = (): void => {
-    const { phone: ph, customer: cust } = encounter;
-    const partCost = cust.repairPartCost || 350;
-    audio.playCash();
-    const netProfit = currentOffer - partCost;
-    store.addMoney(netProfit);
-    store.addReputation(3);
-    lastTransactionSummary = {
-      intent: "repair",
-      phoneModel: ph.brand + " " + ph.model,
-      boughtPrice: currentOffer,
-      actualValue: currentOffer,
-      netProfit,
-      repDelta: 3,
-      foundDefects: [],
-      missedDefects: [],
-      stockUid: ph.uid,
-      sold: true,
-      repairTitle: cust.repairTargetDefect?.title || "Donanım Onarımı",
-      repairPartCost: partCost,
-    };
-    dealFinished = true;
-    customersServedToday += 1;
-    titleEl.textContent = "Tamir teslim edildi · Müşteri memnun";
-    copyEl.textContent = (cust.repairTargetDefect?.title || "Arıza") + " atölyede onarıldı. ₺" + currentOffer.toLocaleString("tr-TR") + " tahsil edildi. Net kâr: +₺" + netProfit.toLocaleString("tr-TR") + ".";
-    sync3DSceneToEncounter();
-    updateCustomerHeader();
-    updateHUD(store.getState());
-    renderInspectionGrid();
-    renderDiagnosticArea();
-  };
+
   const handleOfferSubmission = (): void => {
     const { phone: ph, customer: cust } = encounter;
 
     if (cust.intent === "repair") {
-      if (repairAgreed) {
-        if (workshopRepaired) finishRepairTransaction();
-        else workshop.enter();
+      if (activeBenchRepair !== null && !isReturningCustomerActive) {
+        audio.playFail();
+        notify("⚠️ Atölye dolu! Tek işçi şu anda başka bir telefon tamir ediyor.");
         return;
       }
       const partCost = cust.repairPartCost || 350;
@@ -1792,15 +1958,40 @@ function buildInterface(
       timeMinutes = Math.min(19 * 60, timeMinutes + 10);
 
       if (currentOffer <= cust.minAcceptPrice) {
-        repairAgreed = true;
-        cust.lastResponse = "Tamir fiyatında anlaştık usta. Şimdi atölyede cihazı onaracağım.";
+        const targetId = cust.repairTargetDefect?.id;
+        const targetDefect =
+          ph.defects.find((item) => item.id === targetId) ??
+          ph.defects[0] ?? {
+            id: "repair_defect",
+            category: "battery" as InspectionCategoryId,
+            title: cust.repairTargetDefect?.title || "Donanım Onarımı",
+            description: "Onarım işlemi",
+            valueLoss: 500,
+            found: false,
+            lossRatio: 0.2,
+          };
+
+        activeBenchRepair = {
+          customer: { ...cust },
+          phone: { ...ph, defects: [...ph.defects] },
+          defect: targetDefect,
+          agreedPrice: currentOffer,
+          partCost,
+          remainingSeconds: 900,
+          totalSeconds: 900,
+          isRepaired: false,
+        };
+
         audio.playTap();
-        titleEl.textContent = "Tamir anlaşması sağlandı";
-        copyEl.textContent = "Müşterinin telefonunu tamir atölyesine götür. İş bitince tezgâha dönüp teslim et.";
-        notify("Tamir fiyatı kabul edildi. Önce atölyede onarım yap.");
+        cust.lastResponse = "Tamam usta anlaştık! 1 saat sonra (15 dk) gelip telefonu alırım.";
+        titleEl.textContent = "Cihaz tamire alındı (Tek İşçi meşgul)";
+        copyEl.textContent = `${ph.brand} ${ph.model} tamir tezgahına gönderildi. Müşteri 15 dakika sonra teslim almaya gelecek.`;
+        notify("📱 Telefon tamire alındı! 15 dk sonra müşteri dönecek. Tamir Tezgâhı'ndan (2) durumu görebilirsin.");
         updateCustomerHeader();
         renderDiagnosticArea();
-        workshop.enter();
+        setTimeout(() => {
+          dismissCustomerAndStartWaiting();
+        }, 1200);
         return;
       }
 
@@ -2255,6 +2446,12 @@ function buildInterface(
     updateBatteryLcd("idle");
 
     setStation("counter");
+    if (activeBenchRepair !== null && activeBenchRepair.remainingSeconds <= 0 && !isReturningCustomerActive) {
+      setTimeout(() => {
+        bringReturningCustomerToCounter();
+      }, 700);
+      return;
+    }
     notify(`Müşteri uğurlandı · Yeni müşteri ~${customerWaitTimer} sn sonra gelecek.`);
     updateCustomerHeader();
     updateHUD(store.getState());
@@ -2641,6 +2838,12 @@ function buildInterface(
   return {
     update: updateHUD,
     updateTick: (deltaSeconds: number): void => {
+      if (activeBenchRepair !== null) {
+        activeBenchRepair.remainingSeconds = Math.max(0, activeBenchRepair.remainingSeconds - deltaSeconds);
+        if (activeBenchRepair.remainingSeconds <= 0 && !isReturningCustomerActive && customerState === "WAITING") {
+          bringReturningCustomerToCounter();
+        }
+      }
       if (customerState === "WAITING") {
         customerWaitTimer -= deltaSeconds;
         updateCustomerHeader();
@@ -2768,6 +2971,18 @@ function buildInterface(
     isUserDraggingPhone: () => isDraggingPhone,
     isInspecting: () => isInspecting,
     getWorkshopRepairJob: () => {
+      if (activeBenchRepair) {
+        return {
+          uid: activeBenchRepair.phone.uid,
+          modelKey: activeBenchRepair.phone.brand + "|" + activeBenchRepair.phone.model,
+          modelLabel: activeBenchRepair.phone.brand + " " + activeBenchRepair.phone.model,
+          defectId: activeBenchRepair.defect.id,
+          defectCategory: activeBenchRepair.defect.category,
+          defectTitle: activeBenchRepair.defect.title,
+          remainingSeconds: activeBenchRepair.remainingSeconds,
+          isRepaired: activeBenchRepair.isRepaired,
+        };
+      }
       if (customerState === "INTERACTING" && encounter.customer.intent === "repair" && !dealFinished && repairAgreed) {
         const phoneData = encounter.phone;
         const targetId = encounter.customer.repairTargetDefect?.id;
@@ -2803,6 +3018,18 @@ function buildInterface(
       };
     },
     completeWorkshopRepair: (job: WorkshopRepairJob) => {
+      if (activeBenchRepair && activeBenchRepair.phone.uid === job.uid) {
+        activeBenchRepair.isRepaired = true;
+        const defectIndex = activeBenchRepair.phone.defects.findIndex((item) => item.id === job.defectId);
+        if (defectIndex >= 0) activeBenchRepair.phone.defects.splice(defectIndex, 1);
+        workshopRepaired = true;
+        sync3DSceneToEncounter();
+        updateCustomerHeader();
+        updateHUD(store.getState());
+        renderDiagnosticArea();
+        notify("✓ Telefon atölyede başarıyla onarıldı! Müşteri geldiğinde teslim edebilirsin.");
+        return;
+      }
       const stockPhone = stockItems.find((s) => s.uid === job.uid);
       if (stockPhone) {
         const fIdx = stockPhone.foundDefects.findIndex((d) => (d.id ?? "stock_defect") === job.defectId || d.title === job.defectTitle);
@@ -2846,6 +3073,12 @@ function buildInterface(
           ? "🔧 Tamir tamamlandı. Tezgâha dönüp telefonu müşteriye teslim et."
           : "🔧 Bu arıza onarıldı. Tezgâha dönüp sıradaki tespiti atölyede tamir et.",
       );
+    },
+    advanceBenchTimer: (seconds: number) => {
+      if (activeBenchRepair) {
+        activeBenchRepair.remainingSeconds = Math.max(0, activeBenchRepair.remainingSeconds - seconds);
+        updateHUD(store.getState());
+      }
     },
     returnToCounter: () => setStation("counter"),
     destroy: () => {

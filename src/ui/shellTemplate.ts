@@ -3,6 +3,7 @@ export const SHELL_HTML = `<header class="topbar">
       <div class="brand">
 
         <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Menüyü aç"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
+        <button class="stock-menu-btn" data-open-workers-btn type="button" title="Tamir Atölyesi ve İşçiler" style="margin-left:6px;border-color:rgba(234,179,8,0.5);"><span class="stock-menu-icon">🛠️</span><span class="stock-menu-label">ATÖLYE &amp; İŞÇİLER</span><em data-workers-badge hidden style="background:#eab308;color:#000;">1</em></button>
         <section class="stock-menu-panel" data-stock-menu role="menu" aria-label="Ana Menü" hidden>
           <header class="stock-menu-head"><div><small>CEP DÜKKÂNI</small><strong>Menü</strong></div><button class="stock-menu-close" data-stock-menu-close type="button" aria-label="Kapat">✕</button></header>
           <div class="menu-nav-list">
@@ -13,6 +14,10 @@ export const SHELL_HTML = `<header class="topbar">
             <button class="menu-nav-item" data-open-price-guide type="button">
               <span class="menu-nav-left">📋 <b>Telefonlar &amp; Fiyatlar</b></span>
               <span class="menu-nav-badge">Liste →</span>
+            </button>
+            <button class="menu-nav-item" data-open-workers type="button">
+              <span class="menu-nav-left">🛠️ <b>Tamir Atölyesi (İşçiler)</b></span>
+              <span class="menu-nav-badge" data-menu-workers-badge>1 İşçi →</span>
             </button>
           </div>
         </section>
@@ -51,11 +56,21 @@ export const SHELL_HTML = `<header class="topbar">
             <div class="stock-menu-list" data-price-guide-list></div>
           </section>
         </div>
+        <div class="stock-list-backdrop" data-workers-modal hidden>
+          <section class="stock-list-modal workers-modal" role="dialog" aria-label="Tamir Atölyesi ve İşçiler" style="max-width:560px;">
+            <header class="stock-menu-head">
+              <div><small style="color:var(--gold,#facc15);font-weight:700;">TAMİR ATÖLYESİ &amp; KADRO</small><strong style="font-size:17px;">İşçiler ve Tamir Durumu</strong></div>
+              <button class="stock-menu-close" data-workers-modal-close type="button" aria-label="Kapat">✕</button>
+            </header>
+            <div class="workers-modal-content" data-workers-list style="padding:14px;display:flex;flex-direction:column;gap:12px;"></div>
+          </section>
+        </div>
       </div>
       <div class="stats">
         <div><small>TOPLAM BAKİYE</small><b data-money></b></div>
         <div><small>İTİBAR</small><b data-rep></b></div>
-        <div><small>GÜN · SAAT</small><b data-day></b></div>
+        <div><small>GÜN</small><b data-day></b></div>
+        <div class="stat-clock-card" style="background:rgba(234,179,8,0.14);border:1px solid rgba(234,179,8,0.45);border-radius:6px;padding:2px 10px;text-align:right;"><small style="color:#fef08a;font-weight:700;letter-spacing:0.04em;">SAAT</small><b data-clock style="color:#facc15;font-size:16px;font-family:monospace;font-weight:800;display:block;">09:00</b></div>
       </div>
       <button class="icon-btn fullscreen-toggle" aria-label="Tam Ekran ve Yatay Mod" title="Tam Ekran (Yatay Mod)">⛶</button>
       <button class="icon-btn settings-open" aria-label="Ayarlar ve Gün Sonu">⚙</button>

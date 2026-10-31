@@ -258,6 +258,14 @@ export function buildInterface(
   const stockMenuPanel = select<HTMLElement>("[data-stock-menu]");
   const stockModalEl = select<HTMLElement>("[data-stock-modal]");
   const priceGuideModalEl = select<HTMLElement>("[data-price-guide-modal]");
+  const clockEl = shell.querySelector<HTMLElement>("[data-clock]");
+  const workersModalEl = shell.querySelector<HTMLElement>("[data-workers-modal]");
+  const workersListEl = shell.querySelector<HTMLElement>("[data-workers-list]");
+  const openWorkersBtn = shell.querySelector<HTMLButtonElement>("[data-open-workers-btn]");
+  const menuWorkersBtn = shell.querySelector<HTMLButtonElement>("[data-open-workers]");
+  const workersModalClose = shell.querySelector<HTMLButtonElement>("[data-workers-modal-close]");
+  const workersBadgeEl = shell.querySelector<HTMLElement>("[data-workers-badge]");
+  const menuWorkersBadgeEl = shell.querySelector<HTMLElement>("[data-menu-workers-badge]");
   const openStockListBtn = select<HTMLButtonElement>("[data-open-stock-list]");
   const openPriceGuideBtn = select<HTMLButtonElement>("[data-open-price-guide]");
   const priceGuideListEl = select<HTMLElement>("[data-price-guide-list]");
@@ -322,6 +330,134 @@ export function buildInterface(
             .join("");
   };
 
+  const renderWorkersModal = (): void => {
+    if (!workersListEl) return;
+    const cur = activeBenchRepair;
+    if (cur) {
+      const sec = Math.max(0, Math.ceil(cur.remainingSeconds));
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      const timeStr = `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+      const isRep = cur.isRepaired;
+      const statusBadge = isRep
+        ? '<b style="background:rgba(34,197,94,0.2);color:#4ade80;padding:3px 8px;border-radius:4px;border:1px solid #22c55e;font-size:11px;">✓ TAMİR TAMAMLANDI (MÜŞTERİ BEKLENİYOR)</b>'
+        : '<b style="background:rgba(234,179,8,0.2);color:#facc15;padding:3px 8px;border-radius:4px;border:1px solid #eab308;font-size:11px;">🔧 TAMİR EDİLİYOR (' + timeStr + ' KALDI)</b>';
+
+      workersListEl.innerHTML = `
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:26px;">👨‍🔧</span>
+              <div>
+                <strong style="color:#f8fafc;font-size:15px;display:block;">1. İŞÇİ (USTA TEKNİSYEN)</strong>
+                <small style="color:#94a3b8;">Aktif Tamir Masası · 1/1 Kadro Dolu</small>
+              </div>
+            </div>
+            ${statusBadge}
+          </div>
+          <div style="background:rgba(0,0,0,0.35);border-radius:8px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+            <div><span style="color:#94a3b8;">Müşteri:</span> <strong style="color:#f8fafc;">${cur.customer.name}</strong></div>
+            <div><span style="color:#94a3b8;">Model:</span> <strong style="color:#facc15;">${cur.phone.brand} ${cur.phone.model}</strong></div>
+            <div><span style="color:#94a3b8;">İşlem:</span> <strong style="color:#f8fafc;">${cur.defect.title}</strong></div>
+            <div><span style="color:#94a3b8;">Ücret:</span> <strong style="color:#4ade80;">₺${cur.agreedPrice.toLocaleString("tr-TR")}</strong></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button type="button" class="primary-btn worker-ff-btn" style="flex:1;background:rgba(234,179,8,0.18);border:1px solid #eab308;color:#fef08a;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;">⏩ SÜREYİ 2 DK İLERLET (+2 Dk)</button>
+            <button type="button" class="primary-btn worker-finish-btn" style="flex:1;background:rgba(34,197,94,0.2);border:1px solid #22c55e;color:#86efac;font-size:11px;font-weight:700;padding:8px;border-radius:6px;cursor:pointer;" ${isRep ? "disabled" : ""}>⚡ HEMEN TAMAMLAT</button>
+          </div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.12);border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;opacity:0.75;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:24px;">🔒</span>
+            <div>
+              <strong style="color:#cbd5e1;font-size:14px;display:block;">2. İŞÇİ KADROSU</strong>
+              <small style="color:#64748b;">Dükkân Büyütme &amp; Eleman Alma (Yakında)</small>
+            </div>
+          </div>
+          <span style="color:#94a3b8;font-size:12px;font-weight:700;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;">KİLİTLİ</span>
+        </div>
+      `;
+
+      workersListEl.querySelector(".worker-ff-btn")?.addEventListener("click", () => {
+        audio.playTap();
+        if (activeBenchRepair) {
+          activeBenchRepair.remainingSeconds = Math.max(0, activeBenchRepair.remainingSeconds - 120);
+        }
+        renderWorkersModal();
+      });
+      workersListEl.querySelector(".worker-finish-btn")?.addEventListener("click", () => {
+        audio.playCash();
+        if (activeBenchRepair) {
+          activeBenchRepair.isRepaired = true;
+          activeBenchRepair.remainingSeconds = 0;
+        }
+        workshopRepaired = true;
+        renderWorkersModal();
+        updateCustomerHeader();
+        updateHUD(store.getState());
+        notify("✓ İşçi telefonu onardı! Cihaz teslime hazır.");
+      });
+    } else {
+      workersListEl.innerHTML = `
+        <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:26px;">👨‍🔧</span>
+            <div>
+              <strong style="color:#f8fafc;font-size:15px;display:block;">1. İŞÇİ (USTA TEKNİSYEN)</strong>
+              <small style="color:#94a3b8;">Aktif Tamir Masası · 1. Kadro</small>
+            </div>
+          </div>
+          <b style="background:rgba(34,197,94,0.15);color:#4ade80;padding:4px 10px;border-radius:4px;border:1px solid #22c55e;font-size:12px;">🟢 BOŞTA (YENİ CİHAZ BEKLİYOR)</b>
+        </div>
+        <div class="quote-row" style="margin:4px 0;"><span>Tezgâhtan tamir müşterisiyle anlaştığında telefon bu işçiye verilir ve 1 saatlik (15 dk) onarım süreci başlar.</span></div>
+
+        <div style="background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.12);border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center;opacity:0.75;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:24px;">🔒</span>
+            <div>
+              <strong style="color:#cbd5e1;font-size:14px;display:block;">2. İŞÇİ KADROSU</strong>
+              <small style="color:#64748b;">Dükkân Büyütme &amp; Eleman Alma (Yakında)</small>
+            </div>
+          </div>
+          <span style="color:#94a3b8;font-size:12px;font-weight:700;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:4px;">KİLİTLİ</span>
+        </div>
+      `;
+    }
+  };
+
+  const openWorkersModal = (): void => {
+    if (!workersModalEl) return;
+    stockModalEl.hidden = true;
+    priceGuideModalEl.hidden = true;
+    stockMenuPanel.hidden = true;
+    stockMenuBtn.setAttribute("aria-expanded", "false");
+    audio.unlock();
+    audio.playTap();
+    workersModalEl.hidden = false;
+    renderWorkersModal();
+    wakeRender(400);
+  };
+
+  const closeWorkersModal = (): void => {
+    if (!workersModalEl) return;
+    audio.playTap();
+    workersModalEl.hidden = true;
+    wakeRender(400);
+  };
+
+  openWorkersBtn?.addEventListener("click", openWorkersModal);
+  menuWorkersBtn?.addEventListener("click", openWorkersModal);
+  workersModalClose?.addEventListener("click", closeWorkersModal);
+  workersModalEl?.addEventListener("click", (e) => {
+    if (e.target === workersModalEl) closeWorkersModal();
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.target instanceof HTMLElement && e.target.matches("input,textarea,[contenteditable=true]")) return;
+    if (e.key === "2") openWorkersModal();
+    if (e.key === "Escape" && workersModalEl && !workersModalEl.hidden) closeWorkersModal();
+  });
+
   stockMenuList.addEventListener("click", (event) => {
     const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-repair-stock]");
     if (!btn) return;
@@ -329,7 +465,7 @@ export function buildInterface(
     stockModalEl.hidden = true;
     audio.unlock();
     audio.playTap();
-    workshop.enter();
+    openWorkersModal();
   });
 
   const setStockMenuOpen = (open: boolean): void => {
@@ -562,7 +698,15 @@ export function buildInterface(
   const updateHUD = (state: ReturnType<GameStore["getState"]>): void => {
     moneyEl.textContent = `₺${Math.floor(state.money).toLocaleString("tr-TR")}`;
     repEl.textContent = `${Math.round(state.reputation)} / 100`;
-    dayEl.textContent = `G${String(state.day).padStart(2, "0")} · ${formatTime(timeMinutes)}`;
+    dayEl.textContent = `G${String(state.day).padStart(2, "0")}`;
+    if (clockEl) clockEl.textContent = formatTime(timeMinutes);
+    if (workersBadgeEl) {
+      workersBadgeEl.hidden = activeBenchRepair === null;
+      if (activeBenchRepair) workersBadgeEl.textContent = activeBenchRepair.isRepaired ? "✓" : "1";
+    }
+    if (menuWorkersBadgeEl) {
+      menuWorkersBadgeEl.textContent = activeBenchRepair ? (activeBenchRepair.isRepaired ? "✓ Tamamlandı" : "1 Meşgul →") : "Boşta →";
+    }
     renderStockMenu();
 
     const quota = getDailyCustomerQuota(state.reputation);
@@ -1418,7 +1562,7 @@ export function buildInterface(
           </div>
         `;
         diagnosticEl.querySelector(".go-workshop-rush-btn")?.addEventListener("click", () => {
-          workshop.enter();
+          openWorkersModal();
         });
         diagnosticEl.querySelector(".deliver-fail-btn")?.addEventListener("click", () => {
           finishReturningCustomerDelivery(false);
@@ -1458,7 +1602,7 @@ export function buildInterface(
       diagnosticEl.innerHTML = workshopRepaired
         ? '<div class="result-row"><span>ATÖLYE TAMİRİ TAMAMLANDI</span><b class="good">' + defectTitle + '</b></div><div class="quote-row"><span>₺' + currentOffer.toLocaleString("tr-TR") + ' tutarındaki anlaşma hazır. Telefonu müşteriye teslim et.</span></div><div class="action-row"><button class="primary-btn repair-delivery-btn">TAMİR EDİLDİ · MÜŞTERİYE TESLİM ET <span>→</span></button></div>'
         : '<div class="result-row"><span>TAMİR ANLAŞMASI SAĞLANDI</span><b class="warn">ATÖLYE BEKLİYOR</b></div><div class="quote-row"><span>' + defectTitle + ' için ₺' + currentOffer.toLocaleString("tr-TR") + ' üzerinde anlaşıldı. Önce atölyede tamir et.</span></div><div class="action-row"><button class="primary-btn repair-workshop-btn">ATÖLYEYE GİT <span>→</span></button></div>';
-      diagnosticEl.querySelector(".repair-workshop-btn")?.addEventListener("click", () => workshop.enter());
+      diagnosticEl.querySelector(".repair-workshop-btn")?.addEventListener("click", () => openWorkersModal());
       diagnosticEl.querySelector(".repair-delivery-btn")?.addEventListener("click", () => handleOfferSubmission());
       return;
     }
@@ -2568,6 +2712,9 @@ export function buildInterface(
   return {
     update: updateHUD,
     updateTick: (deltaSeconds: number): void => {
+      timeMinutes = Math.min(19 * 60, timeMinutes + deltaSeconds * (60 / 900));
+      if (clockEl) clockEl.textContent = formatTime(timeMinutes);
+      if (workersModalEl && !workersModalEl.hidden) renderWorkersModal();
       if (activeBenchRepair !== null) {
         activeBenchRepair.remainingSeconds = Math.max(0, activeBenchRepair.remainingSeconds - deltaSeconds);
         if (activeBenchRepair.remainingSeconds <= 0 && !isReturningCustomerActive && customerState === "WAITING") {

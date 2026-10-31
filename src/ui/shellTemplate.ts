@@ -4,6 +4,7 @@ export const SHELL_HTML = `<header class="topbar">
 
         <button class="stock-menu-btn" data-stock-menu-btn type="button" aria-haspopup="true" aria-expanded="false" title="Menüyü aç"><span class="stock-menu-icon">☰</span><span class="stock-menu-label">MENÜ</span><em data-stock-count hidden>0</em></button>
         <button class="stock-menu-btn" data-open-workers-btn type="button" title="Tamir Atölyesi ve İşçiler" style="margin-left:6px;border-color:rgba(234,179,8,0.5);"><span class="stock-menu-icon">🛠️</span><span class="stock-menu-label">ATÖLYE &amp; İŞÇİLER</span><em data-workers-badge hidden style="background:#eab308;color:#000;">1</em></button>
+        <button class="stock-menu-btn" data-open-casino-btn type="button" title="Şans Oyunları & Kumar" style="margin-left:6px;border-color:rgba(168,85,247,0.6);"><span class="stock-menu-icon">🎰</span><span class="stock-menu-label">ŞANS OYUNLARI</span></button>
         <section class="stock-menu-panel" data-stock-menu role="menu" aria-label="Ana Menü" hidden>
           <header class="stock-menu-head"><div><small>CEP DÜKKÂNI</small><strong>Menü</strong></div><button class="stock-menu-close" data-stock-menu-close type="button" aria-label="Kapat">✕</button></header>
           <div class="menu-nav-list">
@@ -18,6 +19,10 @@ export const SHELL_HTML = `<header class="topbar">
             <button class="menu-nav-item" data-open-workers type="button">
               <span class="menu-nav-left">🛠️ <b>Tamir Atölyesi (İşçiler)</b></span>
               <span class="menu-nav-badge" data-menu-workers-badge>1 İşçi →</span>
+            </button>
+            <button class="menu-nav-item" data-open-casino type="button">
+              <span class="menu-nav-left">🎰 <b>Şans Oyunları &amp; Kumar</b></span>
+              <span class="menu-nav-badge" style="background:#9333ea;color:#fff;">5 Oyun →</span>
             </button>
           </div>
         </section>
@@ -63,6 +68,15 @@ export const SHELL_HTML = `<header class="topbar">
               <button class="stock-menu-close" data-workers-modal-close type="button" aria-label="Kapat">✕</button>
             </header>
             <div class="workers-modal-content" data-workers-list style="padding:14px;display:flex;flex-direction:column;gap:12px;"></div>
+          </section>
+        </div>
+        <div class="stock-list-backdrop" data-casino-modal hidden>
+          <section class="stock-list-modal casino-modal" role="dialog" aria-label="Şans Oyunları" style="max-width:500px;">
+            <header class="stock-menu-head">
+              <div><small style="color:#c084fc;font-weight:700;">ŞANS KULÜBÜ &amp; KUMAR</small><strong style="font-size:17px;">🎲 Şansını Dene &amp; Parayı Katla</strong></div>
+              <button class="stock-menu-close" data-casino-modal-close type="button" aria-label="Kapat">✕</button>
+            </header>
+            <div class="casino-content" data-casino-body style="padding:14px;display:flex;flex-direction:column;gap:12px;"></div>
           </section>
         </div>
       </div>

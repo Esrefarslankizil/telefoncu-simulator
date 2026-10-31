@@ -23,6 +23,7 @@ import { CustomerController } from "../game/CustomerController";
 import { InspectionController } from "../game/InspectionController";
 import { BargainController } from "../game/BargainController";
 import { HudController } from "../game/HudController";
+import { CasinoController } from "../game/CasinoController";
 
 export interface ShopUiHandle {
   update: (state: ReturnType<GameStore["getState"]>) => void;
@@ -77,6 +78,8 @@ export function buildInterface(
     wakeRender,
     onStockRepairRequested: () => hud.openWorkersModal(),
   });
+
+  new CasinoController(shell, store, audio, hud.notify, () => hud.updateHUD(store.getState()), wakeRender);
 
   const openSpeech = (text: string, speaker: "customer" | "player" = "customer"): void => {
     const cust = customerController.encounter.customer;

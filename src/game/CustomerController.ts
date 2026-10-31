@@ -116,27 +116,37 @@ export class CustomerController {
       }
     } else if (this.state === "PLACING_PHONE") {
       this.placingTimer += deltaSeconds;
-      const t = Math.min(1, this.placingTimer / 1.7);
+      const t = Math.min(1, this.placingTimer / 1.5);
+      const ease = 1 - Math.pow(1 - t, 3);
 
-      this.options.headMesh.rotation.x = Math.sin(t * 24) * 0.08;
-      this.options.headMesh.rotation.y = Math.cos(t * 12) * 0.06;
+      this.options.headMesh.rotation.x = Math.sin(ease * Math.PI) * 0.12;
+      this.options.armRight.rotation.x = 0.2 + Math.sin(ease * Math.PI) * 0.75;
 
-      if (t < 0.6) {
-        const easeIn = t / 0.6;
-        this.options.armRight.rotation.x = 0.2 + easeIn * 0.75;
-        this.options.phone.position.set(0.12, 1.44 - easeIn * 0.11, 0.50 - easeIn * 0.18);
-      } else {
-        const easeOut = (t - 0.6) / 0.4;
-        this.options.armRight.rotation.x = 0.95 - easeOut * 0.65;
-        this.options.phone.position.set(0.12, 1.33 - easeOut * 0.052, 0.32 - easeOut * 0.10);
-        if (!this.phonePlacedSoundPlayed && t >= 0.75) {
-          this.options.audio.playTap();
-          this.phonePlacedSoundPlayed = true;
-        }
+      const startY = 1.42;
+      const targetY = 1.278;
+      const startZ = 0.55;
+      const targetZ = 0.22;
+      const startRotX = -0.75;
+      const targetRotX = -0.05;
+
+      this.options.phone.position.set(
+        0.12,
+        startY + (targetY - startY) * ease,
+        startZ + (targetZ - startZ) * ease,
+      );
+      this.options.phone.rotation.set(
+        startRotX + (targetRotX - startRotX) * ease,
+        0,
+        0,
+      );
+
+      if (!this.phonePlacedSoundPlayed && t >= 0.88) {
+        this.options.audio.playTap();
+        this.phonePlacedSoundPlayed = true;
       }
-      this.options.wakeRender(200);
+      this.options.wakeRender(120);
 
-      if (this.placingTimer >= 1.7) {
+      if (t >= 1) {
         this.state = "INTERACTING";
         this.options.armRight.rotation.x = 0.2;
         this.options.headMesh.rotation.set(0, 0, 0);

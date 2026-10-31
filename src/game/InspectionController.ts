@@ -192,6 +192,25 @@ export class InspectionController {
     }
   }
 
+  private animateCable(targetPos: Vector3, isPlugged: boolean, onDone?: () => void): void {
+    const start = this.options.cablePlugGroup.position.clone();
+    const t0 = performance.now();
+    const step = () => {
+      const p = Math.min(1, (performance.now() - t0) / 220);
+      const ease = 1 - (1 - p) * (1 - p);
+      this.options.cablePlugGroup.position.lerpVectors(start, targetPos, ease);
+      this.options.updateCableMesh(isPlugged);
+      this.options.wakeRender(60);
+      if (p < 1) requestAnimationFrame(step);
+      else {
+        this.options.cablePlugGroup.position.copy(targetPos);
+        this.options.updateCableMesh(isPlugged);
+        onDone?.();
+      }
+    };
+    requestAnimationFrame(step);
+  }
+
   private runBatteryTest3Seconds(): void {
     if (this.batteryTestInterval !== null) {
       clearInterval(this.batteryTestInterval);
@@ -199,11 +218,11 @@ export class InspectionController {
     }
     this.options.audio.unlock();
     this.isChargerPlugged = true;
-    this.options.cablePlugGroup.position.set(0.119, 1.278, 0.22);
-    this.options.cablePlugGroup.rotation.set(0, 0, 0);
-    this.options.updateCableMesh(true);
-    this.options.audio.playCablePlug();
-    this.options.ammeterDisplayMat.color.set("#38bdf8");
+    const plugTarget = new Vector3(0.119, 1.278, 0.22);
+    this.animateCable(plugTarget, true, () => {
+      this.options.audio.playCablePlug();
+      this.options.ammeterDisplayMat.color.set("#38bdf8");
+    });
 
     this.batteryLiveOverlay.hidden = false;
     const heading = this.batteryLiveOverlay.querySelector("strong");
@@ -240,28 +259,30 @@ export class InspectionController {
 
         this.options.updateBatteryLcd("done", 100, isHealthy, healthPct);
 
-        if (rating === "ÇOK KÖTÜ" || rating === "KÖTÜ") {
+        const isBad = rating === "ÇOK KÖTÜ" || rating === "KÖTÜ";
+        if (isBad) {
           this.options.audio.playDefect();
           if (defect) this.options.batteryMarker.visible = true;
-          if (heading) heading.textContent = "⚠ BATARYA ANALİZİ TAMAMLANDI";
-          this.batteryLiveVal.textContent = `%${healthPct} · ${rating}`;
           this.batteryLiveVal.style.color = rating === "ÇOK KÖTÜ" ? "#f87171" : "#fb923c";
           this.options.ammeterDisplayMat.color.set("#ef4444");
-          this.options.onCategoryInspected("battery");
-          this.options.notify(`⚠ Pil Sağlığı %${healthPct} · Durum: ${rating} (${defect?.title || "Aşınmış Batarya"})`);
         } else {
           this.options.audio.playClean();
-          if (heading) heading.textContent = "✓ BATARYA ANALİZİ TAMAMLANDI";
-          this.batteryLiveVal.textContent = `%${healthPct} · ${rating}`;
           this.batteryLiveVal.style.color = rating === "ÇOK İYİ" ? "#22d3ee" : rating === "İYİ" ? "#4ade80" : "#facc15";
           this.options.ammeterDisplayMat.color.set("#10b981");
-          this.options.onCategoryInspected("battery");
-          this.options.notify(`✓ Pil Sağlığı %${healthPct} · Durum: ${rating}`);
         }
+        if (heading) heading.textContent = `${isBad ? "⚠" : "✓"} BATARYA ANALİZİ TAMAMLANDI`;
+        this.batteryLiveVal.textContent = `%${healthPct} · ${rating}`;
+        this.options.onCategoryInspected("battery");
+        this.options.notify(`${isBad ? "⚠" : "✓"} Pil Sağlığı %${healthPct} · Durum: ${rating}${defect ? ` (${defect.title})` : ""}`);
         this.updateHud();
         window.setTimeout(() => {
           this.batteryLiveOverlay.hidden = true;
-        }, 4000);
+          this.animateCable(this.options.chargerDockPos, false, () => {
+            this.isChargerPlugged = false;
+            this.options.ammeterDisplayMat.color.set("#0d9488");
+            this.options.updateBatteryLcd("idle");
+          });
+        }, 3200);
       }
     }, 60);
   }

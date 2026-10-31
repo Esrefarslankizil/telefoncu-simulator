@@ -234,13 +234,13 @@ export const SHELL_HTML = `<header class="topbar">
           <div class="bubble-customer-info">
             <span class="bubble-avatar" data-bubble-avatar>👤</span>
             <div>
-              <strong data-bubble-name>Müşteri</strong>
+              <strong class="bubble-name" data-bubble-name>Müşteri</strong>
               <span class="bubble-intent-badge sell" data-bubble-intent>🏷️ SATIŞ</span>
             </div>
           </div>
           <span class="bubble-voice-icon">🔊 8-BIT SES</span>
         </div>
-        <div class="bubble-content" data-bubble-text>
+        <div class="bubble-content bubble-text" data-bubble-text>
           ...
         </div>
         <div class="bubble-footer">

@@ -124,12 +124,12 @@ export class CustomerController {
       if (t < 0.6) {
         const easeIn = t / 0.6;
         this.options.armRight.rotation.x = 0.2 + easeIn * 0.75;
-        this.options.phone.position.set(0.12, 1.42 - easeIn * 0.16, 0.48 - easeIn * 0.26);
+        this.options.phone.position.set(0.12, 1.44 - easeIn * 0.11, 0.50 - easeIn * 0.18);
       } else {
         const easeOut = (t - 0.6) / 0.4;
         this.options.armRight.rotation.x = 0.95 - easeOut * 0.65;
-        this.options.phone.position.set(0.12, 1.26 - easeOut * 0.08, 0.22);
-        if (!this.phonePlacedSoundPlayed && t >= 0.72) {
+        this.options.phone.position.set(0.12, 1.33 - easeOut * 0.052, 0.32 - easeOut * 0.10);
+        if (!this.phonePlacedSoundPlayed && t >= 0.75) {
           this.options.audio.playTap();
           this.phonePlacedSoundPlayed = true;
         }
@@ -140,7 +140,8 @@ export class CustomerController {
         this.state = "INTERACTING";
         this.options.armRight.rotation.x = 0.2;
         this.options.headMesh.rotation.set(0, 0, 0);
-        this.options.phone.position.set(0.12, 1.18, 0.22);
+        this.options.phone.position.set(0.12, 1.278, 0.22);
+        this.options.phone.rotation.set(-0.05, 0, 0);
         this.options.notify("Cihaz tezgâha bırakıldı.");
         this.options.openSpeechBubble(this.encounter.customer.speechText);
         this.options.onPhonePlaced();

@@ -51,12 +51,12 @@ export class HudController {
     this.customerRequest = select<HTMLElement>("[data-customer-request]");
     this.nextCustomerBtn = select<HTMLButtonElement>(".next-customer");
 
-    this.speechBubbleOverlay = select<HTMLElement>(".speech-bubble-overlay");
-    this.bubbleAvatar = select<HTMLElement>(".bubble-avatar");
-    this.bubbleName = select<HTMLElement>(".bubble-name");
-    this.bubbleText = select<HTMLElement>(".bubble-text");
-    this.bubbleIntent = select<HTMLElement>(".bubble-intent-badge");
-    const bubbleDismissBtn = select<HTMLButtonElement>(".bubble-dismiss-btn");
+    this.speechBubbleOverlay = this.shell.querySelector<HTMLElement>(".speech-bubble-overlay")!;
+    this.bubbleAvatar = this.shell.querySelector<HTMLElement>("[data-bubble-avatar], .bubble-avatar")!;
+    this.bubbleName = this.shell.querySelector<HTMLElement>("[data-bubble-name], .bubble-name")!;
+    this.bubbleText = this.shell.querySelector<HTMLElement>("[data-bubble-text], .bubble-text, .bubble-content")!;
+    this.bubbleIntent = this.shell.querySelector<HTMLElement>("[data-bubble-intent], .bubble-intent-badge")!;
+    const bubbleDismissBtn = this.shell.querySelector<HTMLButtonElement>(".bubble-dismiss-btn");
 
     this.workersModalEl = this.shell.querySelector<HTMLElement>("[data-workers-modal]");
     this.workersListEl = this.shell.querySelector<HTMLElement>("[data-workers-list]");
@@ -71,10 +71,16 @@ export class HudController {
       if (e.target === this.workersModalEl) this.closeWorkersModal();
     });
 
-    bubbleDismissBtn.addEventListener("click", () => {
+    const closeBubble = () => {
       this.speechBubbleOverlay.hidden = true;
+      this.speechBubbleOverlay.style.display = "none";
       this.audio.stopCustomerSpeech();
       this.audio.playTap();
+      this.wakeRender(400);
+    };
+    bubbleDismissBtn?.addEventListener("click", closeBubble);
+    this.speechBubbleOverlay.addEventListener("click", (e) => {
+      if (e.target === this.speechBubbleOverlay) closeBubble();
     });
 
     window.addEventListener("keydown", (e) => {
@@ -126,6 +132,8 @@ export class HudController {
     this.bubbleIntent.className = "bubble-intent-badge " + (speaker === "player" ? "repair" : intent);
     this.bubbleIntent.textContent = speaker === "player" ? "TEKLİF" : intent.toUpperCase();
     this.speechBubbleOverlay.hidden = false;
+    this.speechBubbleOverlay.style.display = "flex";
+    this.wakeRender(400);
     if (speaker === "customer") this.audio.playCustomerSpeech();
     else this.audio.playTap();
   }

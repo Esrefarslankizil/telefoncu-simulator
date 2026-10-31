@@ -1,12 +1,10 @@
 export class OrientationManager {
   private warningEl: HTMLElement | null = null;
   private fullscreenBtn: HTMLButtonElement | null = null;
-  private isPortrait = false;
-  private onPause?: (() => void) | undefined;
   private onResume?: (() => void) | undefined;
 
   constructor(options?: { onPause?: (() => void) | undefined; onResume?: (() => void) | undefined }) {
-    this.onPause = options?.onPause;
+    void options?.onPause;
     this.onResume = options?.onResume;
     this.warningEl = document.getElementById("orientation-warning");
     this.init();
@@ -122,21 +120,10 @@ export class OrientationManager {
     if (!this.warningEl) {
       this.warningEl = document.getElementById("orientation-warning");
     }
-    // Dikey mod kontrolü: genişlik yükseklikten küçükse
-    const isPortrait = window.innerWidth < window.innerHeight;
-
-    if (isPortrait !== this.isPortrait) {
-      this.isPortrait = isPortrait;
-      if (this.warningEl) {
-        if (isPortrait) {
-          this.warningEl.classList.remove("hidden");
-          this.onPause?.();
-        } else {
-          this.warningEl.classList.add("hidden");
-          this.onResume?.();
-        }
-      }
+    // Telefonda hem dikey hem yatay mod tam desteklenir; ekranı bloke etme
+    if (this.warningEl) {
+      this.warningEl.classList.add("hidden");
     }
-    return !isPortrait;
+    return true;
   }
 }

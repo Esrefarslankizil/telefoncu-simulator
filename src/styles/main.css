@@ -1222,3 +1222,163 @@ body { overscroll-behavior: none; touch-action: none; user-select: none; -webkit
   color: #fff;
   border-color: #fde047;
 }
+
+/* ══════════════ TELEFON & MOBİL DİKEY/YATAY TAM UYUMLULUK ══════════════ */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+button, a, input, select {
+  touch-action: manipulation;
+}
+
+@media (max-width: 680px) {
+  .topbar {
+    top: max(8px, env(safe-area-inset-top));
+    left: max(6px, env(safe-area-inset-left));
+    right: max(6px, env(safe-area-inset-right));
+    gap: 4px;
+    padding: 0;
+  }
+  .brand {
+    gap: 3px;
+  }
+  .stock-menu-btn {
+    padding: 5px 7px;
+    height: 32px;
+  }
+  .stock-menu-btn .stock-menu-label {
+    display: none;
+  }
+  .stock-menu-btn .stock-menu-icon {
+    font-size: 15px;
+  }
+  .stats {
+    gap: 3px;
+  }
+  .stats > div {
+    min-width: 48px;
+    padding: 3px 6px;
+    border-radius: 6px;
+  }
+  .stats > div:first-child {
+    min-width: 60px;
+  }
+  .stats > div b {
+    font-size: 11px !important;
+  }
+  .stats > div small {
+    font-size: 6.5px !important;
+  }
+  .hud-clock-badge {
+    min-width: 52px !important;
+    padding: 2px 6px !important;
+  }
+  .hud-clock-badge b {
+    font-size: 12px !important;
+  }
+  .hud-clock-badge small {
+    font-size: 7px !important;
+  }
+  .icon-btn.settings-open {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+  .ui-help-btn {
+    width: 15px;
+    height: 15px;
+    min-width: 15px;
+    min-height: 15px;
+    font-size: 9px;
+    margin-left: 2px;
+  }
+
+  /* Müşteri Başlık Kartı */
+  .customer-card {
+    top: max(46px, calc(env(safe-area-inset-top) + 42px));
+    left: 8px;
+    right: 8px;
+    width: auto !important;
+    padding: 6px 10px;
+    gap: 8px;
+    border-radius: 10px;
+  }
+  .customer-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 13px;
+  }
+  .customer-copy strong {
+    font-size: 11px;
+  }
+  .customer-copy span {
+    font-size: 9px;
+    line-height: 1.25;
+    max-width: 55vw;
+  }
+  .customer-card .quiet-btn {
+    font-size: 8.5px !important;
+    padding: 5px 8px;
+    white-space: nowrap;
+  }
+
+  /* Alt Tezgâh Paneli */
+  .work-panel {
+    left: 6px;
+    right: 6px;
+    bottom: max(6px, env(safe-area-inset-bottom));
+    width: auto !important;
+    max-height: 42vh;
+    padding: 9px 11px;
+    border-radius: 12px;
+  }
+  .work-panel p[data-panel-copy] {
+    font-size: 9.5px;
+    margin: 4px 0 8px;
+    line-height: 1.35;
+  }
+  .action-row {
+    gap: 6px;
+  }
+  .action-row button {
+    min-height: 36px;
+    font-size: 9.5px !important;
+    font-weight: 800;
+  }
+  .bargain-ctrl {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .bargain-btn {
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  /* Modallar */
+  .stock-list-modal,
+  .casino-modal,
+  .workers-modal,
+  .help-modal {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: 84vh !important;
+    margin: auto;
+    border-radius: 12px;
+  }
+  .stock-menu-panel {
+    left: 8px;
+    top: max(44px, calc(env(safe-area-inset-top) + 40px));
+    width: calc(100vw - 16px);
+    max-width: 300px;
+  }
+
+  /* Konuşma Baloncuğu */
+  .speech-bubble {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    padding: 12px;
+  }
+  .bubble-text {
+    font-size: 12px;
+  }
+}

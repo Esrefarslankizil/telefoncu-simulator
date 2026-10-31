@@ -60,6 +60,10 @@ async function bootstrap(): Promise<void> {
   const camera = new PerspectiveCamera(52, window.innerWidth / Math.max(window.innerHeight, 1), 0.08, 35);
   camera.position.set(0, 1.68, -0.85);
   camera.lookAt(0, 1.40, 1.45);
+  if (window.innerWidth < window.innerHeight) {
+    camera.fov = Math.min(76, 52 / (window.innerWidth / window.innerHeight));
+    camera.updateProjectionMatrix();
+  }
 
   scene.add(new AmbientLight("#dce8d9", 1.85));
   const keyLight = new DirectionalLight("#ffe4b5", 2.1);
@@ -251,7 +255,9 @@ async function bootstrap(): Promise<void> {
   );
 
   const onResize = (): void => {
-    camera.aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+    const aspect = window.innerWidth / Math.max(window.innerHeight, 1);
+    camera.aspect = aspect;
+    camera.fov = aspect < 1 ? Math.min(76, 52 / aspect) : 52;
     camera.updateProjectionMatrix();
     workshop.resize(window.innerWidth, window.innerHeight);
     wakeRender(1000);
